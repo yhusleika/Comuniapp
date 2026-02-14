@@ -1,0 +1,64 @@
+name: social_management_pro
+description: Comuniapp - Gestión Social offline-first.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Core
+  path: ^1.9.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  get_it: ^7.6.4
+  flutter_bloc: ^8.1.3
+  equatable: ^2.0.5
+  dartz: ^0.10.1
+  flutter_riverpod: ^2.4.9
+  go_router: ^13.0.1
+  dio: ^5.4.2+1
+  formz: ^0.7.0
+  
+  # Utilities
+  uuid: ^4.2.1
+  intl: ^0.19.0
+  crypto: ^3.0.3
+  path_provider: ^2.1.1
+  connectivity_plus: ^5.0.2
+  animate_do: ^3.1.2
+  
+  # Media
+  flutter_image_compress: ^2.3.0
+  image_picker: ^1.0.4
+  font_awesome_flutter: ^10.6.0
+  
+  # Dashboard
+  syncfusion_flutter_gauges: ^24.2.3
+  timeline_tile: ^2.0.0
+  data_table_2: 2.5.8
+  excel: ^4.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  build_runner: ^2.4.6
+  hive_generator: ^2.0.1
+  mocktail: ^1.0.1
+  bloc_test: ^9.1.5
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/comuniApp_soloLogo.png"
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/loaders/
