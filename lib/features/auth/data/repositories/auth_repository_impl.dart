@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:hive/hive.dart';
 import '../../../../core/error/failures.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -13,6 +14,34 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, User>> login(String username, String password) async {
     try {
+      final String role;
+      final String lowerUsername = username.toLowerCase();
+      if (lowerUsername.contains('admin')) {
+        role = 'admin';
+      } else if (lowerUsername.contains('auditor')) {
+        role = 'auditor';
+      } else {
+        role = 'operador';
+      }
+
+      // Check recovered credentials first
+      final recoveredBox = await Hive.openBox('recovered_credentials');
+      final savedPassword = recoveredBox.get(username);
+      if (savedPassword != null) {
+        if (password == savedPassword) {
+          final user = UserModel(
+            id: role == 'admin' ? 'admin_1' : '1',
+            username: username,
+            role: role,
+            passwordHash: 'recovered_hash',
+          );
+          await localDataSource.cacheUser(user);
+          return Right(user);
+        } else {
+          return const Left(CacheFailure('Contraseña incorrecta'));
+        }
+      }
+
       // Admin user for verification
       if (username == 'admin' && password == 'admin') {
         final user = UserModel(
@@ -28,7 +57,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final user = UserModel(
         id: '1',
         username: username,
-        role: username.toLowerCase().contains('admin') ? 'admin' : 'vocero',
+        role: role,
         passwordHash: 'mock_hash',
       );
 

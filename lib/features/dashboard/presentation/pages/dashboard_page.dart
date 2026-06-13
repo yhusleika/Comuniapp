@@ -41,8 +41,23 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final int crossAxisCount = screenWidth > 900
+        ? 4
+        : screenWidth > 600
+            ? 3
+            : 2;
+    final double childAspectRatio = screenWidth > 1200
+        ? 2.5
+        : screenWidth > 600
+            ? 2.2
+            : screenWidth > 380
+                ? 1.9
+                : 1.5;
 
     return CustomScaffold(
+      scaffoldKey: scaffoldKey,
       drawer: SideMenu(scaffoldKey: scaffoldKey),
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -60,12 +75,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
             // 1. Grid de Indicadores (Cards)
             GridView.count(
-              crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
+              crossAxisCount: crossAxisCount,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 16,
               crossAxisSpacing: 16,
-              childAspectRatio: 2.2,
+              childAspectRatio: childAspectRatio,
               children: _categories.entries.map((e) {
                 return _IndicatorCard(
                   title: e.key,
@@ -117,17 +132,17 @@ class _DashboardPageState extends State<DashboardPage> {
                               children: [
                                 Text(
                                   '${_selectedValue.toInt()}%',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 32,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
+                                    color: isDark ? Colors.white : Colors.black87,
                                   ),
                                 ),
                                 Text(
                                   _selectedCategory,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
-                                    color: Colors.black54,
+                                    color: isDark ? Colors.white70 : Colors.black54,
                                   ),
                                 ),
                               ],
@@ -172,7 +187,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.normal,
-                                  color: Colors.black87,
+                                  color: isDark ? Colors.white : Colors.black87,
                                 ),
                               ),
                             ],
@@ -224,11 +239,11 @@ class _DashboardPageState extends State<DashboardPage> {
                   columnSpacing: 12,
                   horizontalMargin: 12,
                   minWidth: 600,
-                  columns: const [
-                    DataColumn2(label: Text('Encargado'), size: ColumnSize.L),
-                    DataColumn2(label: Text('Fechas'), size: ColumnSize.M),
-                    DataColumn2(label: Text('Progreso'), size: ColumnSize.M),
-                    DataColumn2(label: Text('Estatus'), size: ColumnSize.S),
+                  columns: [
+                    DataColumn2(label: Text('Encargado', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.L),
+                    DataColumn2(label: Text('Fechas', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.M),
+                    DataColumn2(label: Text('Progreso', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.M),
+                    DataColumn2(label: Text('Estatus', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.S),
                   ],
                   rows: [
                     _projectRow('Juan Pérez', '01/02 - 28/02', 0.8, 'Terminado',
@@ -253,12 +268,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 itemCount: 5,
                 separatorBuilder: (_, __) => const Divider(),
                 itemBuilder: (context, index) {
-                  return const ListTile(
-                    leading: CircleAvatar(child: Icon(Icons.history)),
-                    title: Text('Registro de nuevo habitante'),
-                    subtitle: Text('Por: Ana López • Hace 10 min'),
+                  return ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.history)),
+                    title: Text('Registro de nuevo habitante', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                    subtitle: Text('Por: Ana López • Hace 10 min', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
                     trailing:
-                        Text('Éxito', style: TextStyle(color: Colors.green)),
+                        const Text('Éxito', style: TextStyle(color: Colors.green)),
                   );
                 },
               ),
@@ -297,11 +312,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
   DataRow _projectRow(
       String name, String date, double progress, String status, Color color) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textStyle = TextStyle(color: isDark ? Colors.white.withOpacity(0.9) : Colors.black87);
     return DataRow(cells: [
-      DataCell(Text(name, style: const TextStyle(color: Colors.black87))),
-      DataCell(Text(date, style: const TextStyle(color: Colors.black87))),
+      DataCell(Text(name, style: textStyle)),
+      DataCell(Text(date, style: textStyle)),
       DataCell(LinearProgressIndicator(
-          value: progress, backgroundColor: Colors.black12, color: color)),
+          value: progress, backgroundColor: isDark ? Colors.white12 : Colors.black12, color: color)),
       DataCell(Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -328,34 +345,65 @@ class _IndicatorCard extends StatelessWidget {
     required this.color,
   });
 
+  Color _getContrastColor(Color bg) {
+    return bg.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final contrastColor = _getContrastColor(color);
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color,
+        color: color, // Solid color background block
         borderRadius: BorderRadius.circular(15),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)],
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white, size: 30),
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: contrastColor.withOpacity(0.2),
+            child: Icon(icon, color: contrastColor, size: 22),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold)),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: contrastColor.withOpacity(0.85),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: contrastColor,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -373,23 +421,32 @@ class _SectionContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
           ),
           const SizedBox(height: 20),
           child,
@@ -416,12 +473,14 @@ class _TimelineItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SizedBox(
       height: 80,
       child: TimelineTile(
         isFirst: isFirst,
         isLast: isLast,
-        beforeLineStyle: const LineStyle(color: Colors.black12),
+        beforeLineStyle: LineStyle(color: isDark ? Colors.white24 : Colors.black12),
         indicatorStyle: IndicatorStyle(
           width: 30,
           color: status == 'Culminado' ? Colors.green : Colors.blue,
@@ -435,11 +494,20 @@ class _TimelineItem extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.black87)),
-              Text('$date • $status',
-                  style: const TextStyle(color: Colors.black54, fontSize: 12)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Text(
+                '$date • $status',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
         ),

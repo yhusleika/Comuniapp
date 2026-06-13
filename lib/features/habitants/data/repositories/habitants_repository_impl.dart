@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/network/network_info.dart';
+import '../../../../core/services/mongodb_service.dart';
 import '../../domain/entities/habitante.dart';
 import '../../domain/repositories/habitants_repository.dart';
 import '../datasources/habitants_local_data_source.dart';
@@ -9,10 +10,12 @@ import '../models/habitante_model.dart';
 class HabitantsRepositoryImpl implements HabitantsRepository {
   final HabitantsLocalDataSource localDataSource;
   final NetworkInfo networkInfo;
+  final MongoDBService mongoDBService;
 
   HabitantsRepositoryImpl({
     required this.localDataSource,
     required this.networkInfo,
+    required this.mongoDBService,
   });
 
   @override
@@ -37,8 +40,36 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
   @override
   Future<Either<Failure, void>> addHabitante(Habitante habitante) async {
     try {
+      final isConnected = await networkInfo.isConnected;
+      bool apiSynced = false;
+      
       final model = HabitanteModel.fromEntity(habitante);
-      await localDataSource.cacheHabitante(model);
+      
+      if (isConnected) {
+        apiSynced = await mongoDBService.createRecord('habitants', model.toJson());
+      }
+      
+      final cacheModel = HabitanteModel(
+        id: model.id,
+        cedula: model.cedula,
+        nombres: model.nombres,
+        apellidos: model.apellidos,
+        telefono: model.telefono,
+        sector: model.sector,
+        ayudaRecibida: model.ayudaRecibida,
+        puntoReferencia: model.puntoReferencia,
+        tieneDiscapacidad: model.tieneDiscapacidad,
+        tieneEnfermedadCronica: model.tieneEnfermedadCronica,
+        condicionVivienda: model.condicionVivienda,
+        tipoVivienda: model.tipoVivienda,
+        registeredBy: model.registeredBy,
+        fechaRegistro: model.fechaRegistro,
+        detallesDiscapacidad: model.detallesDiscapacidad,
+        detallesEnfermedad: model.detallesEnfermedad,
+        isSynced: apiSynced,
+      );
+      
+      await localDataSource.cacheHabitante(cacheModel);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -48,8 +79,36 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
   @override
   Future<Either<Failure, void>> updateHabitante(Habitante habitante) async {
     try {
+      final isConnected = await networkInfo.isConnected;
+      bool apiSynced = false;
+      
       final model = HabitanteModel.fromEntity(habitante);
-      await localDataSource.updateHabitante(model);
+      
+      if (isConnected) {
+        apiSynced = await mongoDBService.updateRecord('habitants', model.id, model.toJson());
+      }
+      
+      final cacheModel = HabitanteModel(
+        id: model.id,
+        cedula: model.cedula,
+        nombres: model.nombres,
+        apellidos: model.apellidos,
+        telefono: model.telefono,
+        sector: model.sector,
+        ayudaRecibida: model.ayudaRecibida,
+        puntoReferencia: model.puntoReferencia,
+        tieneDiscapacidad: model.tieneDiscapacidad,
+        tieneEnfermedadCronica: model.tieneEnfermedadCronica,
+        condicionVivienda: model.condicionVivienda,
+        tipoVivienda: model.tipoVivienda,
+        registeredBy: model.registeredBy,
+        fechaRegistro: model.fechaRegistro,
+        detallesDiscapacidad: model.detallesDiscapacidad,
+        detallesEnfermedad: model.detallesEnfermedad,
+        isSynced: apiSynced,
+      );
+      
+      await localDataSource.updateHabitante(cacheModel);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -59,6 +118,10 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
   @override
   Future<Either<Failure, void>> deleteHabitante(String id) async {
     try {
+      final isConnected = await networkInfo.isConnected;
+      if (isConnected) {
+        await mongoDBService.deleteRecord('habitants', id);
+      }
       await localDataSource.deleteHabitante(id);
       return const Right(null);
     } catch (e) {

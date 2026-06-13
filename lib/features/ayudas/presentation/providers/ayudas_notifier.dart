@@ -3,13 +3,14 @@ import '../../domain/entities/ayuda_type.dart';
 import '../../../habitants/domain/entities/habitante.dart';
 
 class AyudasNotifier extends ChangeNotifier {
+  final bool isAuditor;
   List<Habitante> _allHabitants = [];
   List<AyudaType> _ayudaTypes = [];
   List<Habitante> _filteredBeneficiaries = [];
 
   String _searchQuery = '';
 
-  AyudasNotifier(List<Habitante> inhabitants, List<AyudaType> types) {
+  AyudasNotifier(List<Habitante> inhabitants, List<AyudaType> types, {required this.isAuditor}) {
     _allHabitants = inhabitants;
     _ayudaTypes = types;
     _applyFilters();
@@ -48,17 +49,20 @@ class AyudasNotifier extends ChangeNotifier {
   BeneficiariesDataTableSource get dataSource => BeneficiariesDataTableSource(
         beneficiaries: _filteredBeneficiaries,
         ayudaTypes: _ayudaTypes,
+        isAuditor: isAuditor,
       );
 }
 
 class BeneficiariesDataTableSource extends DataTableSource {
   final List<Habitante> beneficiaries;
   final List<AyudaType> ayudaTypes;
+  final bool isAuditor;
   void Function(Habitante)? onEdit;
 
   BeneficiariesDataTableSource({
     required this.beneficiaries,
     required this.ayudaTypes,
+    required this.isAuditor,
     this.onEdit,
   });
 
@@ -74,10 +78,11 @@ class BeneficiariesDataTableSource extends DataTableSource {
         DataCell(_buildAidChip(h.ayudaRecibida)),
         DataCell(Text(
             '${h.fechaRegistro.day}/${h.fechaRegistro.month}/${h.fechaRegistro.year}')),
-        DataCell(IconButton(
-          icon: const Icon(Icons.edit, color: Colors.blue),
-          onPressed: () => onEdit?.call(h),
-        )),
+        if (!isAuditor)
+          DataCell(IconButton(
+            icon: const Icon(Icons.edit, color: Colors.blue),
+            onPressed: () => onEdit?.call(h),
+          )),
       ],
     );
   }

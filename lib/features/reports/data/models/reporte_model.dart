@@ -86,4 +86,21 @@ class ReporteModel extends Reporte {
       isSynced: reporte.isSynced,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'titulo': titulo,
+      'descripcion': descripcion,
+      'tipo': tipo,
+      'prioridad': prioridad,
+      'estatus': estatus,
+      'fotosPaths': fotosPaths,
+      'latitud': latitud,
+      'longitud': longitud,
+      'createdBy': createdBy,
+      'fechaRegistro': fechaRegistro.toIso8601String(),
+      'isSynced': isSynced,
+    };
+  }
 }

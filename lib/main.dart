@@ -51,7 +51,7 @@ class _MyAppState extends State<MyApp> {
       child: MaterialApp.router(
         title: 'Comuniapp',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme().getTheme(),
+        theme: AppTheme().getTheme(false),
         routerConfig: createAppRouter(_authNotifier),
       ),
     );

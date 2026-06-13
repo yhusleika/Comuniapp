@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/habitante.dart';
 
 class HabitantsNotifier extends ChangeNotifier {
+  final bool isAuditor;
   List<Habitante> _allHabitants = [];
   List<Habitante> _filteredHabitants = [];
 
@@ -9,7 +10,7 @@ class HabitantsNotifier extends ChangeNotifier {
   String _selectedZone = 'Todas';
   String _selectedAid = 'Todas';
 
-  HabitantsNotifier(List<Habitante> initialHabitants) {
+  HabitantsNotifier(List<Habitante> initialHabitants, {required this.isAuditor}) {
     _allHabitants = initialHabitants;
     _filteredHabitants = initialHabitants;
   }
@@ -51,16 +52,19 @@ class HabitantsNotifier extends ChangeNotifier {
 
   HabitanteDataTableSource get dataSource => HabitanteDataTableSource(
         habitants: _filteredHabitants,
+        isAuditor: isAuditor,
       );
 }
 
 class HabitanteDataTableSource extends DataTableSource {
   final List<Habitante> habitants;
+  final bool isAuditor;
   void Function(Habitante)? onEdit;
   void Function(String)? onDelete;
 
   HabitanteDataTableSource({
     required this.habitants,
+    required this.isAuditor,
     this.onEdit,
     this.onDelete,
   });
@@ -77,19 +81,20 @@ class HabitanteDataTableSource extends DataTableSource {
         DataCell(Text(h.cedula)),
         DataCell(Text(h.sector)),
         DataCell(Text(h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida)),
-        DataCell(Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue),
-              onPressed: () => onEdit?.call(h),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => onDelete?.call(h.id),
-            ),
-          ],
-        )),
+        if (!isAuditor)
+          DataCell(Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.blue),
+                onPressed: () => onEdit?.call(h),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () => onDelete?.call(h.id),
+              ),
+            ],
+          )),
       ],
     );
   }

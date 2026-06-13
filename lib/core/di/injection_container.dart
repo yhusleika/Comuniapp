@@ -42,6 +42,8 @@ import '../../features/censos/domain/usecases/censos_usecases.dart';
 
 import '../../core/services/image_compression_service.dart';
 import '../../core/services/sync_manager.dart';
+import '../../core/services/mongodb_service.dart';
+import '../../core/theme/theme_cubit.dart';
 import '../../core/network/network_info.dart';
 
 final sl = GetIt.instance;
@@ -54,6 +56,7 @@ Future<void> init() async {
         logout: sl(),
         checkAuthStatus: sl(),
       ));
+// ... (omitting intermediate code matching precisely)
 
   // Use cases
   sl.registerLazySingleton(() => Login(sl()));
@@ -88,6 +91,7 @@ Future<void> init() async {
   sl.registerLazySingleton<HabitantsRepository>(() => HabitantsRepositoryImpl(
         localDataSource: sl(),
         networkInfo: sl(),
+        mongoDBService: sl(),
       ));
 
   // Data sources
@@ -109,6 +113,7 @@ Future<void> init() async {
   sl.registerLazySingleton<ReportsRepository>(() => ReportsRepositoryImpl(
         localDataSource: sl(),
         networkInfo: sl(),
+        mongoDBService: sl(),
       ));
 
   // Data sources
@@ -173,11 +178,14 @@ Future<void> init() async {
   // Core services
   sl.registerLazySingleton(() => Connectivity());
   sl.registerLazySingleton(() => ImageCompressionService());
+  sl.registerLazySingleton(() => MongoDBService());
+  sl.registerLazySingleton(() => ThemeCubit());
 
   // Sync
   sl.registerLazySingleton(() => SyncManager(
         connectivity: sl(),
         habitantsRepository: sl(),
         reportsRepository: sl(),
+        mongoDBService: sl(),
       ));
 }

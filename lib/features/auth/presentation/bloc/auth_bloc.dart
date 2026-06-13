@@ -38,18 +38,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onLoginRequested(
       AuthLoginRequested event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
-    // BYPASS: Temporarily disabled real authentication
-    await Future.delayed(const Duration(milliseconds: 500)); // Simulate network
-    emit(const AuthAuthenticated(
-        User(id: 'temp-id', username: 'admin', role: 'admin')));
-
-    /* Original logic:
     final result = await login(LoginParams(username: event.username, password: event.password));
     result.fold(
       (failure) => emit(AuthError(failure.message)),
       (user) => emit(AuthAuthenticated(user)),
     );
-    */
   }
 
   Future<void> _onLogoutRequested(

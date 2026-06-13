@@ -24,11 +24,6 @@ const appMenuItems = <MenuItem>[
     icon: Icons.person_outline,
   ),
   MenuItem(
-    title: 'Información de calle',
-    link: '/street-info',
-    icon: Icons.add_road,
-  ),
-  MenuItem(
     title: 'Ayudas',
     link: '/ayudas',
     icon: Icons.volunteer_activism_outlined,
@@ -47,6 +42,21 @@ const appMenuItems = <MenuItem>[
     title: 'Eventos/Jornadas/Proyectos',
     link: '/eventos',
     icon: Icons.event_note_outlined,
+  ),
+  MenuItem(
+    title: 'Comuna',
+    link: '/comuna',
+    icon: Icons.foundation_outlined,
+  ),
+  MenuItem(
+    title: 'Administración',
+    link: '/administracion',
+    icon: Icons.admin_panel_settings_outlined,
+  ),
+  MenuItem(
+    title: 'Auditoría',
+    link: '/auditoria',
+    icon: Icons.security_outlined,
   ),
   MenuItem(
     title: 'Estadísticas',

@@ -179,15 +179,21 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
             
             final fieldChunks = _chunkList(fields, 2);
             return Card(
-              color: const Color(0xFF2A2A3D),
+              color: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Colors.black12),
+              ),
               margin: const EdgeInsets.only(bottom: 15),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(category, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(color: Colors.white24),
+                    Text(category, style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Divider(color: Colors.black12),
                     const SizedBox(height: 10),
                     ...fieldChunks.map((chunk) => _buildFieldGridRow(chunk, _formData)),
                   ],
@@ -197,19 +203,27 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
           }),
             
            Card(
-             color: const Color(0xFF2A2A3D),
+             color: Colors.white,
+             surfaceTintColor: Colors.transparent,
+             elevation: 2,
+             shape: RoundedRectangleBorder(
+               borderRadius: BorderRadius.circular(12),
+               side: const BorderSide(color: Colors.black12),
+             ),
               margin: const EdgeInsets.only(bottom: 15),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: DropdownButtonFormField<String>(
-                    dropdownColor: const Color(0xFF1E1E2D),
+                    dropdownColor: Colors.white,
                     value: _formData['estatus'] ?? 'Censados',
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Colors.black87),
                     decoration: const InputDecoration(
                         labelText: 'Estatus del Censo',
-                        labelStyle: TextStyle(color: Colors.white70)),
+                        labelStyle: TextStyle(color: Colors.black54)),
                     items: ['Censados', 'Pendientes', 'Casos Especiales']
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .map((s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(s, style: const TextStyle(color: Colors.black87))))
                         .toList(),
                     onChanged: (v) => setState(() => _formData['estatus'] = v),
                   ),
@@ -221,33 +235,115 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
 
     if (widget.isPreview) return content;
 
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E2D),
-      title: Text(widget.record != null ? 'Editar Registro' : 'Agregar Registro',
-          style: const TextStyle(color: Colors.white)),
-      content: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.8,
-        child: Form(
-          key: _formKey,
-          child: content,
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
+
+    return Dialog(
+      alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
+      insetPadding: isMobile ? const EdgeInsets.only(top: 40) : const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: isMobile 
+          ? const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))
+          : BorderRadius.circular(16),
+      ),
+      backgroundColor: Colors.white,
+      elevation: 8,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 750,
+          maxHeight: isMobile ? size.height * 0.9 : size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF416FDF),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: isMobile ? Radius.zero : Radius.zero,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    widget.record != null ? 'Editar Registro' : 'Agregar Registro',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            // Form body wrapped in Expanded/Flexible
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Form(
+                  key: _formKey,
+                  child: content,
+                ),
+              ),
+            ),
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF416FDF),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 2,
+                    ),
+                    onPressed: _save,
+                    child: Text(widget.record != null ? 'Guardar' : 'Agregar', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar')),
-        ElevatedButton(
-          onPressed: _save,
-          child: Text(widget.record != null ? 'Guardar' : 'Agregar'),
-        ),
-      ],
     );
   }
 
   Widget _buildFamilyCompositionCard() {
     return Card(
-      color: const Color(0xFF2A2A3D),
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
       margin: const EdgeInsets.only(bottom: 15),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -260,7 +356,7 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
               spacing: 10,
               runSpacing: 10,
               children: [
-                const Text('Datos de Personas', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('Datos de Personas', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
                 ElevatedButton.icon(
                   onPressed: () {
                     setState(() {
@@ -275,9 +371,9 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
                 )
               ],
             ),
-            const Divider(color: Colors.white24),
+            const Divider(color: Colors.black12),
             if (_familyMembers.isEmpty)
-               const Text('Sin integrantes. Presione "Agregar Integrante".', style: TextStyle(color: Colors.white54)),
+               const Text('Sin integrantes. Presione "Agregar Integrante".', style: TextStyle(color: Colors.black54)),
             ..._familyMembers.asMap().entries.map((entry) {
               int index = entry.key;
               Map<String, dynamic> member = entry.value;
@@ -288,7 +384,7 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
                 margin: const EdgeInsets.only(bottom: 15),
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white24),
+                  border: Border.all(color: Colors.black12),
                   borderRadius: BorderRadius.circular(8)
                 ),
                 child: Column(
@@ -297,7 +393,7 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Integrante #${index + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        Text('Integrante #${index + 1}', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () {
@@ -340,11 +436,13 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
       case FieldType.number:
         mainWidget = TextFormField(
           initialValue: dataMap[field.id]?.toString() ?? '',
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.black87),
           keyboardType: field.type == FieldType.number ? TextInputType.number : TextInputType.text,
           decoration: InputDecoration(
               labelText: field.label + (field.isRequired ? ' *' : ''),
-              labelStyle: const TextStyle(color: Colors.white70)),
+              labelStyle: const TextStyle(color: Colors.black54),
+              filled: true,
+              fillColor: Colors.grey.shade50),
           validator: field.isRequired ? (v) => (v == null || v.isEmpty) ? 'Requerido' : null : null,
           onChanged: (v) => setState(() => dataMap[field.id] = v),
           onSaved: (v) => dataMap[field.id] = v,
@@ -352,15 +450,19 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
         break;
       case FieldType.dropdown:
         mainWidget = DropdownButtonFormField<String>(
-          dropdownColor: const Color(0xFF1E1E2D),
+          dropdownColor: Colors.white,
           value: dataMap[field.id],
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.black87),
           decoration: InputDecoration(
               isDense: true,
               labelText: field.label + (field.isRequired ? ' *' : ''),
-              labelStyle: const TextStyle(color: Colors.white70)),
+              labelStyle: const TextStyle(color: Colors.black54),
+              filled: true,
+              fillColor: Colors.grey.shade50),
           items: (field.options ?? [])
-              .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
+              .map((s) => DropdownMenuItem(
+                  value: s,
+                  child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black87))))
               .toList(),
           onChanged: (v) => setState(() => dataMap[field.id] = v),
           onSaved: (v) => dataMap[field.id] = v,
@@ -378,14 +480,15 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
         mainWidget = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(field.label + (field.isRequired ? ' *' : ''), style: const TextStyle(color: Colors.white70)),
+            Text(field.label + (field.isRequired ? ' *' : ''), style: const TextStyle(color: Colors.black54)),
             const SizedBox(height: 5),
             Wrap(
               spacing: 8.0,
               children: (field.options ?? []).map((option) {
+                final isSelected = currentSelected.contains(option);
                 return FilterChip(
-                  label: Text(option),
-                  selected: currentSelected.contains(option),
+                  label: Text(option, style: TextStyle(color: isSelected ? Colors.white : Colors.black87)),
+                  selected: isSelected,
                   onSelected: (bool selected) {
                     setState(() {
                       if (selected) {
@@ -410,7 +513,7 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
         mainWidget = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(field.label + (field.isRequired ? ' *' : ''), style: const TextStyle(color: Colors.white70)),
+            Text(field.label + (field.isRequired ? ' *' : ''), style: const TextStyle(color: Colors.black54)),
             const SizedBox(height: 5),
             Column(
               children: (field.options ?? []).map((option) {
@@ -431,15 +534,20 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
                         });
                       },
                     ),
-                    Expanded(child: Text(option, style: const TextStyle(color: Colors.white))),
+                    Expanded(child: Text(option, style: const TextStyle(color: Colors.black87))),
                     if (isSelected && !option.toLowerCase().contains('otro')) 
                       SizedBox(
                         width: 80,
                         child: TextFormField(
                           initialValue: currentSelectedQ[option]?.toString() ?? '1',
                           keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: const InputDecoration(labelText: 'Cantidad', isDense: true, labelStyle: TextStyle(color: Colors.white54)),
+                          style: const TextStyle(color: Colors.black87),
+                          decoration: InputDecoration(
+                              labelText: 'Cantidad',
+                              isDense: true,
+                              labelStyle: const TextStyle(color: Colors.black54),
+                              filled: true,
+                              fillColor: Colors.grey.shade50),
                           onChanged: (v) => currentSelectedQ[option] = v,
                           onSaved: (v) => currentSelectedQ[option] = v,
                         )
@@ -463,11 +571,13 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
           const SizedBox(height: 8),
           TextFormField(
             initialValue: dataMap['${field.id}_otros']?.toString() ?? '',
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
+            style: const TextStyle(color: Colors.black87),
+            decoration: InputDecoration(
                 labelText: 'Mencionar detalle de "Otro/s"',
-                labelStyle: TextStyle(color: Colors.white70),
-                border: OutlineInputBorder()
+                labelStyle: const TextStyle(color: Colors.black54),
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.grey.shade50
             ),
             onChanged: (v) => dataMap['${field.id}_otros'] = v,
             onSaved: (v) => dataMap['${field.id}_otros'] = v,

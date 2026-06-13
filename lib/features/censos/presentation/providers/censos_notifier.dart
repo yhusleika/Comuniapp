@@ -68,12 +68,14 @@ class FamilyRecordsDataTableSource extends DataTableSource {
   final Function(CensoRecord) onEdit;
   final Function(CensoRecord) onDelete;
   final BuildContext context;
+  final bool isAuditor;
 
   FamilyRecordsDataTableSource({
     required this.records,
     required this.onEdit,
     required this.onDelete,
     required this.context,
+    this.isAuditor = false,
   });
 
   @override
@@ -85,21 +87,20 @@ class FamilyRecordsDataTableSource extends DataTableSource {
       DataCell(Text(record.jefeFamilia)),
       DataCell(Text(record.cedula)),
       DataCell(Text(record.direccion)),
-      DataCell(Text(record.numeroHijos.toString())),
-      DataCell(_buildStatusChip(record.estatus)),
-      DataCell(Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.blue),
-            onPressed: () => onEdit(record),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: () => onDelete(record),
-          ),
-        ],
-      )),
+      if (!isAuditor)
+        DataCell(Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.blue),
+              onPressed: () => onEdit(record),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () => onDelete(record),
+            ),
+          ],
+        )),
     ]);
   }
 

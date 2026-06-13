@@ -7,6 +7,8 @@ class ManagementItem {
   final String category; // 'Eventos', 'Proyectos', 'Jornadas'
   final double progress; // 0.0 to 1.0
   final String status; // 'Pendiente', 'En Proceso', 'Completado'
+  final List<String> attendeeNames;
+  final List<String> photos;
 
   ManagementItem({
     required this.id,
@@ -17,6 +19,8 @@ class ManagementItem {
     required this.category,
     this.progress = 0.0,
     this.status = 'Pendiente',
+    this.attendeeNames = const [],
+    this.photos = const [],
   });
 
   ManagementItem copyWith({
@@ -28,6 +32,8 @@ class ManagementItem {
     String? category,
     double? progress,
     String? status,
+    List<String>? attendeeNames,
+    List<String>? photos,
   }) {
     return ManagementItem(
       id: id ?? this.id,
@@ -38,6 +44,8 @@ class ManagementItem {
       category: category ?? this.category,
       progress: progress ?? this.progress,
       status: status ?? this.status,
+      attendeeNames: attendeeNames ?? this.attendeeNames,
+      photos: photos ?? this.photos,
     );
   }
 }

@@ -116,4 +116,26 @@ class HabitanteModel extends Habitante {
       isSynced: habitante.isSynced,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'cedula': cedula,
+      'nombres': nombres,
+      'apellidos': apellidos,
+      'telefono': telefono,
+      'sector': sector,
+      'puntoReferencia': puntoReferencia,
+      'tieneDiscapacidad': tieneDiscapacidad,
+      'detallesDiscapacidad': detallesDiscapacidad,
+      'tieneEnfermedadCronica': tieneEnfermedadCronica,
+      'detallesEnfermedad': detallesEnfermedad,
+      'condicionVivienda': condicionVivienda,
+      'tipoVivienda': tipoVivienda,
+      'registeredBy': registeredBy,
+      'fechaRegistro': fechaRegistro.toIso8601String(),
+      'isSynced': isSynced,
+      'ayudaRecibida': ayudaRecibida,
+    };
+  }
 }

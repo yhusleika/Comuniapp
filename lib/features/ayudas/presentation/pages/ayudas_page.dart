@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
+import 'package:excel/excel.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import '../../../../core/utils/file_saver.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
@@ -11,6 +15,9 @@ import '../bloc/ayudas_state.dart';
 import '../providers/ayudas_notifier.dart';
 import '../../../habitants/domain/entities/habitante.dart';
 import '../../domain/entities/ayuda_type.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+
+import '../widgets/ayuda_form_modal.dart';
 
 class AyudasPage extends StatelessWidget {
   const AyudasPage({super.key});
@@ -42,8 +49,11 @@ class _AyudasViewState extends State<AyudasView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authState = context.watch<AuthBloc>().state;
+    final isAuditor = authState is AuthAuthenticated && authState.user.role.toLowerCase() == 'auditor';
 
     return CustomScaffold(
+      scaffoldKey: scaffoldKey,
       drawer: SideMenu(scaffoldKey: scaffoldKey),
       child: MultiBlocListener(
         listeners: [
@@ -91,7 +101,7 @@ class _AyudasViewState extends State<AyudasView> {
                 if (ayudasState is AyudasLoaded &&
                     habitantsState is HabitantsLoaded) {
                   _notifier ??= AyudasNotifier(
-                      habitantsState.habitants, ayudasState.ayudaTypes);
+                      habitantsState.habitants, ayudasState.ayudaTypes, isAuditor: isAuditor);
                   _notifier!.updateData(
                       habitantsState.habitants, ayudasState.ayudaTypes);
 
@@ -102,11 +112,11 @@ class _AyudasViewState extends State<AyudasView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildHeader(theme),
+                          _buildHeader(theme, isAuditor),
                           const SizedBox(height: 20),
-                          _buildAidTypesSection(theme, ayudasState.ayudaTypes),
+                          _buildAidTypesSection(theme, ayudasState.ayudaTypes, isAuditor),
                           const SizedBox(height: 30),
-                          _buildBeneficiariesSection(theme),
+                          _buildBeneficiariesSection(theme, isAuditor),
                         ],
                       ),
                     ),
@@ -132,29 +142,36 @@ class _AyudasViewState extends State<AyudasView> {
     }
   }
 
-  Widget _buildHeader(ThemeData theme) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildHeader(ThemeData theme, bool isAuditor) {
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 16,
+      runSpacing: 16,
       children: [
         Text(
           'Gestión de Ayudas',
           style: theme.textTheme.headlineMedium
               ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        ElevatedButton.icon(
-          onPressed: () => _showAyudaTypeModal(),
-          icon: const Icon(Icons.add),
-          label: const Text('Crear Nueva Ayuda'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: theme.colorScheme.primary,
-            foregroundColor: theme.colorScheme.onPrimary,
+        if (!isAuditor)
+          IconButton(
+            onPressed: () => _showAyudaTypeModal(),
+            icon: const Icon(Icons.add, size: 24),
+            style: IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.all(12),
+              elevation: 3,
+              shadowColor: Colors.black38,
+              shape: const CircleBorder(),
+            ),
           ),
-        ),
       ],
     );
   }
 
-  Widget _buildAidTypesSection(ThemeData theme, List<AyudaType> types) {
+  Widget _buildAidTypesSection(ThemeData theme, List<AyudaType> types, bool isAuditor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -183,23 +200,26 @@ class _AyudasViewState extends State<AyudasView> {
                             Expanded(
                                 child: Text(type.nombre,
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16))),
-                            PopupMenuButton<String>(
-                              onSelected: (value) {
-                                if (value == 'edit')
-                                  _showAyudaTypeModal(ayudaType: type);
-                                if (value == 'delete')
-                                  _confirmDeleteAidType(type.id);
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                    value: 'edit', child: Text('Editar')),
-                                const PopupMenuItem(
-                                    value: 'delete', child: Text('Eliminar')),
-                              ],
-                              icon: const Icon(Icons.more_vert, size: 20),
-                            ),
+                                         fontWeight: FontWeight.bold,
+                                         fontSize: 16))),
+                            if (!isAuditor)
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'edit') {
+                                    _showAyudaTypeModal(ayudaType: type);
+                                  }
+                                  if (value == 'delete') {
+                                    _confirmDeleteAidType(type.id);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                      value: 'edit', child: Text('Editar')),
+                                  const PopupMenuItem(
+                                      value: 'delete', child: Text('Eliminar')),
+                                ],
+                                icon: const Icon(Icons.more_vert, size: 20),
+                              ),
                           ],
                         ),
                         const Spacer(),
@@ -218,7 +238,7 @@ class _AyudasViewState extends State<AyudasView> {
     );
   }
 
-  Widget _buildBeneficiariesSection(ThemeData theme) {
+  Widget _buildBeneficiariesSection(ThemeData theme, bool isAuditor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -228,12 +248,30 @@ class _AyudasViewState extends State<AyudasView> {
             Text('Beneficiarios Activos',
                 style: theme.textTheme.titleLarge
                     ?.copyWith(color: Colors.white70)),
-            ElevatedButton.icon(
-              onPressed: _exportBeneficiaries,
-              icon: const Icon(Icons.download),
-              label: const Text('Exportar a Excel'),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, foregroundColor: Colors.white),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _exportToExcel,
+                  icon: const Icon(Icons.table_view, color: Colors.white),
+                  tooltip: 'Exportar a Excel',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    padding: const EdgeInsets.all(10),
+                    elevation: 2,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _exportToPDF,
+                  icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                  tooltip: 'Exportar a PDF',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    padding: const EdgeInsets.all(10),
+                    elevation: 2,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -255,31 +293,138 @@ class _AyudasViewState extends State<AyudasView> {
         const SizedBox(height: 16),
         Theme(
           data: theme.copyWith(cardColor: Colors.white),
-          child: PaginatedDataTable(
-            header: const Text('Listado de Beneficiarios'),
-            rowsPerPage: _notifier!.filteredBeneficiaries.length > 10
-                ? 10
-                : (_notifier!.filteredBeneficiaries.isEmpty
-                    ? 1
-                    : _notifier!.filteredBeneficiaries.length),
-            columns: const [
-              DataColumn(label: Text('Nombre')),
-              DataColumn(label: Text('Cédula')),
-              DataColumn(label: Text('Ayuda')),
-              DataColumn(label: Text('Fecha')),
-              DataColumn(label: Text('Editar')),
-            ],
-            source: _notifier!.dataSource..onEdit = _showBeneficiaryEditModal,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: MediaQuery.of(context).size.width > 832
+                    ? MediaQuery.of(context).size.width - 32
+                    : 800,
+                maxWidth: MediaQuery.of(context).size.width > 832
+                    ? MediaQuery.of(context).size.width - 32
+                    : 800,
+              ),
+              child: PaginatedDataTable(
+                header: const Text('Listado de Beneficiarios'),
+                rowsPerPage: _notifier!.filteredBeneficiaries.length > 10
+                    ? 10
+                    : (_notifier!.filteredBeneficiaries.isEmpty
+                        ? 1
+                        : _notifier!.filteredBeneficiaries.length),
+                columns: [
+                  const DataColumn(label: Text('Nombre')),
+                  const DataColumn(label: Text('Cédula')),
+                  const DataColumn(label: Text('Ayuda')),
+                  const DataColumn(label: Text('Fecha')),
+                  if (!isAuditor) const DataColumn(label: Text('Editar')),
+                ],
+                source: _notifier!.dataSource..onEdit = _showBeneficiaryEditModal,
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _exportBeneficiaries() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Exportando beneficiarios visibles... (Placeholder)')),
+  Future<void> _exportToExcel() async {
+    final list = _notifier!.filteredBeneficiaries;
+    if (list.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay beneficiarios activos para exportar')),
+      );
+      return;
+    }
+
+    var excel = Excel.createExcel();
+    Sheet sheetObject = excel['Sheet1'];
+
+    // Header
+    sheetObject.appendRow([
+      TextCellValue('Nombre'),
+      TextCellValue('Apellido'),
+      TextCellValue('Cédula'),
+      TextCellValue('Ayuda Asignada'),
+      TextCellValue('Fecha')
+    ]);
+
+    // Data
+    for (var b in list) {
+      sheetObject.appendRow([
+        TextCellValue(b.nombres),
+        TextCellValue(b.apellidos),
+        TextCellValue(b.cedula),
+        TextCellValue(b.ayudaRecibida),
+        TextCellValue('${b.fechaRegistro.day}/${b.fechaRegistro.month}/${b.fechaRegistro.year}')
+      ]);
+    }
+
+    final fileBytes = excel.save();
+    if (fileBytes != null) {
+      await FileSaver.save(
+        'beneficiarios_ayudas.xlsx',
+        fileBytes,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        (msg) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(msg), backgroundColor: Colors.green),
+            );
+          }
+        },
+      );
+    }
+  }
+
+  Future<void> _exportToPDF() async {
+    final list = _notifier!.filteredBeneficiaries;
+    if (list.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay beneficiarios activos para exportar')),
+      );
+      return;
+    }
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        build: (pw.Context context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Text('Reporte de Beneficiarios de Ayudas', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            ),
+            pw.SizedBox(height: 10),
+            pw.TableHelper.fromTextArray(
+              headers: ['Nombre', 'Cédula', 'Ayuda Asignada', 'Fecha'],
+              data: list.map((b) => [
+                '${b.nombres} ${b.apellidos}',
+                b.cedula,
+                b.ayudaRecibida,
+                '${b.fechaRegistro.day}/${b.fechaRegistro.month}/${b.fechaRegistro.year}'
+              ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              cellAlignment: pw.Alignment.centerLeft,
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    await FileSaver.save(
+      'beneficiarios_ayudas.pdf',
+      bytes,
+      'application/pdf',
+      (msg) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: Colors.green),
+          );
+        }
+      },
     );
   }
 
@@ -308,60 +453,47 @@ class _AyudasViewState extends State<AyudasView> {
   }
 
   void _showAyudaTypeModal({AyudaType? ayudaType}) {
-    final isEditing = ayudaType != null;
-    final nombreController =
-        TextEditingController(text: ayudaType?.nombre ?? '');
-    final responsableController =
-        TextEditingController(text: ayudaType?.responsable ?? '');
-    final formKey = GlobalKey<FormState>();
+    final habitantsState = context.read<HabitantsBloc>().state;
+    final List<Habitante> allHabitants = habitantsState is HabitantsLoaded
+        ? habitantsState.habitants
+        : [];
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isEditing ? 'Editar Ayuda' : 'Nueva Ayuda'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nombreController,
-                decoration:
-                    const InputDecoration(labelText: 'Nombre de la Ayuda'),
-                validator: (v) => v!.isEmpty ? 'Campo requerido' : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: responsableController,
-                decoration: const InputDecoration(labelText: 'Responsable'),
-                validator: (v) => v!.isEmpty ? 'Campo requerido' : null,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                final newType = AyudaType(
-                  id: ayudaType?.id ?? const Uuid().v4(),
-                  nombre: nombreController.text,
-                  responsable: responsableController.text,
-                );
-                if (isEditing) {
-                  context.read<AyudasBloc>().add(UpdateAyudaTypeEvent(newType));
-                } else {
-                  context.read<AyudasBloc>().add(CreateAyudaType(newType));
-                }
-                Navigator.pop(context);
-              }
-            },
-            child: Text(isEditing ? 'Guardar' : 'Crear'),
-          ),
-        ],
+      builder: (dialogCtx) => AyudaFormModal(
+        allHabitants: allHabitants,
+        ayudaType: ayudaType,
+        onSave: (newType, selectedHabitants) {
+          if (ayudaType != null) {
+            context.read<AyudasBloc>().add(UpdateAyudaTypeEvent(newType));
+          } else {
+            context.read<AyudasBloc>().add(CreateAyudaType(newType));
+          }
+
+          for (var h in selectedHabitants) {
+            final updatedH = Habitante(
+              id: h.id,
+              cedula: h.cedula,
+              nombres: h.nombres,
+              apellidos: h.apellidos,
+              telefono: h.telefono,
+              sector: h.sector,
+              ayudaRecibida: newType.nombre,
+              puntoReferencia: h.puntoReferencia,
+              tieneDiscapacidad: h.tieneDiscapacidad,
+              tieneEnfermedadCronica: h.tieneEnfermedadCronica,
+              condicionVivienda: h.condicionVivienda,
+              tipoVivienda: h.tipoVivienda,
+              registeredBy: h.registeredBy,
+              fechaRegistro: h.fechaRegistro,
+              detallesDiscapacidad: h.detallesDiscapacidad,
+              detallesEnfermedad: h.detallesEnfermedad,
+            );
+            context.read<HabitantsBloc>().add(UpdateHabitanteEvent(updatedH));
+          }
+
+          Navigator.pop(dialogCtx);
+        },
       ),
     );
   }
