@@ -82,4 +82,30 @@ class CensoRecordModel extends CensoRecord {
       datosDinamicos: datosDinamicos,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'censoId': censoId,
+      'jefeFamilia': jefeFamilia,
+      'cedula': cedula,
+      'direccion': direccion,
+      'numeroHijos': numeroHijos,
+      'estatus': estatus,
+      'datosDinamicos': datosDinamicos,
+    };
+  }
+
+  factory CensoRecordModel.fromJson(Map<String, dynamic> json) {
+    return CensoRecordModel(
+      id: json['id'] ?? '',
+      censoId: json['censoId'] ?? '',
+      jefeFamilia: json['jefeFamilia'] ?? '',
+      cedula: json['cedula'] ?? '',
+      direccion: json['direccion'] ?? '',
+      numeroHijos: json['numeroHijos'] ?? 0,
+      estatus: json['estatus'] ?? '',
+      datosDinamicos: json['datosDinamicos'] != null ? Map<String, dynamic>.from(json['datosDinamicos']) : {},
+    );
+  }
 }

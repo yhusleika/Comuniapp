@@ -65,4 +65,26 @@ class CensoModel extends Censo {
       camposSeleccionados: camposSeleccionados,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'zona': zona,
+      'responsable': responsable,
+      'fecha': fecha.toIso8601String(),
+      'camposSeleccionados': camposSeleccionados,
+    };
+  }
+
+  factory CensoModel.fromJson(Map<String, dynamic> json) {
+    return CensoModel(
+      id: json['id'] ?? '',
+      nombre: json['nombre'] ?? '',
+      zona: json['zona'] ?? '',
+      responsable: json['responsable'] ?? '',
+      fecha: DateTime.tryParse(json['fecha'] ?? '') ?? DateTime.now(),
+      camposSeleccionados: json['camposSeleccionados'] != null ? List<String>.from(json['camposSeleccionados']) : [],
+    );
+  }
 }

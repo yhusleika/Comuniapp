@@ -138,6 +138,8 @@ Future<void> init() async {
   // Repository
   sl.registerLazySingleton<AyudasRepository>(() => AyudasRepositoryImpl(
         localDataSource: sl(),
+        networkInfo: sl(),
+        mongoDBService: sl(),
       ));
 
   // Data sources
@@ -166,6 +168,8 @@ Future<void> init() async {
   // Repository
   sl.registerLazySingleton<CensosRepository>(() => CensosRepositoryImpl(
         localDataSource: sl(),
+        networkInfo: sl(),
+        mongoDBService: sl(),
       ));
 
   // Data sources

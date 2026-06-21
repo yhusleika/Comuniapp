@@ -38,4 +38,20 @@ class AyudaTypeModel extends AyudaType {
       responsable: responsable,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'responsable': responsable,
+    };
+  }
+
+  factory AyudaTypeModel.fromJson(Map<String, dynamic> json) {
+    return AyudaTypeModel(
+      id: json['id'] ?? '',
+      nombre: json['nombre'] ?? '',
+      responsable: json['responsable'] ?? '',
+    );
+  }
 }

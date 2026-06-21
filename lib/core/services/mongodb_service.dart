@@ -76,4 +76,17 @@ class MongoDBService {
       return [];
     }
   }
+
+  Future<Map<String, dynamic>> getStats() async {
+    try {
+      final response = await _dio.get('/stats');
+      if (response.data != null && response.data['data'] != null) {
+        return response.data['data'] as Map<String, dynamic>;
+      }
+      return {};
+    } catch (e) {
+      debugPrint('MongoDB Remote API Error: $e');
+      return {};
+    }
+  }
 }

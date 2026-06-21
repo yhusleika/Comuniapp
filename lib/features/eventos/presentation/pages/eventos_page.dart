@@ -17,6 +17,7 @@ import '../../../habitants/domain/entities/habitante.dart';
 import '../../domain/models/management_models.dart';
 import '../widgets/management_form_modal.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../../core/services/mongodb_service.dart';
 
 class EventosPage extends StatelessWidget {
   const EventosPage({super.key});
@@ -51,41 +52,37 @@ class _EventosViewState extends State<EventosView> {
   // Controllers
   final _searchController = TextEditingController();
 
-  // Mock Data
-  late List<ManagementItem> _items;
+  // Mock Data replaced by remote fetching
+  List<ManagementItem> _items = [];
 
   @override
   void initState() {
     super.initState();
-    _items = [
-      ManagementItem(
-          id: '1',
-          name: 'Mantenimiento Parque',
-          date: DateTime.now().subtract(const Duration(days: 2)),
-          description: 'Limpieza y pintura general de las canchas y áreas infantiles.',
-          responsible: 'Juan Pérez',
-          category: 'Proyectos',
-          progress: 0.4,
-          status: 'En Proceso'),
-      ManagementItem(
-          id: '2',
-          name: 'Vacunación Infantil',
-          date: DateTime.now().add(const Duration(days: 5)),
-          description: 'Jornada médica para niños de 0 a 10 años en el centro de salud.',
-          responsible: 'Ana López',
-          category: 'Jornadas',
-          progress: 0.1,
-          status: 'Pendiente'),
-      ManagementItem(
-          id: '3',
-          name: 'Feria Comunitaria',
-          date: DateTime.now().add(const Duration(days: 12)),
-          description: 'Evento cultural y gastronómico para recaudar fondos comunitarios.',
-          responsible: 'Carlos Ruiz',
-          category: 'Eventos',
-          progress: 0.8,
-          status: 'En Proceso'),
-    ];
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    try {
+      final service = sl<MongoDBService>();
+      final remoteData = await service.getRecords('eventos');
+      
+      setState(() {
+        _items = remoteData.map((json) => ManagementItem(
+          id: json['id'],
+          name: json['name'],
+          date: DateTime.parse(json['date']),
+          description: json['description'] ?? '',
+          responsible: json['responsible'],
+          category: json['category'],
+          progress: (json['progress'] ?? 0.0).toDouble(),
+          status: json['status'] ?? 'Pendiente',
+          attendeeNames: List<String>.from(json['attendeeNames'] ?? []),
+          photos: List<String>.from(json['photos'] ?? []),
+        )).toList();
+      });
+    } catch (e) {
+      debugPrint('Error loading eventos: $e');
+    }
   }
 
   @override
@@ -104,16 +101,26 @@ class _EventosViewState extends State<EventosView> {
     }).toList();
   }
 
-  void _saveStatusChanges() {
+  Future<void> _saveStatusChanges() async {
+    final service = sl<MongoDBService>();
+    for (final item in _items) {
+      await service.updateRecord('eventos', item.id, {
+        'status': item.status,
+        'progress': item.progress,
+      });
+    }
+
     setState(() {
       _hasUnsavedChanges = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Cambios de estatus guardados correctamente'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cambios de estatus guardados correctamente'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   void _showManagementModal({ManagementItem? item}) {
@@ -126,26 +133,45 @@ class _EventosViewState extends State<EventosView> {
         item: item,
         category: _selectedCategory,
         allHabitants: allHabitants,
-        onSave: (savedItem) {
-          setState(() {
-            if (item != null) {
+        onSave: (savedItem) async {
+          final service = sl<MongoDBService>();
+          final Map<String, dynamic> data = {
+            'id': savedItem.id,
+            'name': savedItem.name,
+            'date': savedItem.date.toIso8601String(),
+            'description': savedItem.description,
+            'responsible': savedItem.responsible,
+            'category': savedItem.category,
+            'progress': savedItem.progress,
+            'status': savedItem.status,
+            'attendeeNames': savedItem.attendeeNames,
+            'photos': savedItem.photos,
+          };
+
+          if (item != null) {
+            await service.updateRecord('eventos', savedItem.id, data);
+            setState(() {
               final index = _items.indexWhere((i) => i.id == item.id);
-              if (index != -1) {
-                _items[index] = savedItem;
-              }
-            } else {
-              _items.add(savedItem);
-            }
-          });
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(item != null
-                  ? '$_selectedCategory actualizado correctamente'
-                  : '$_selectedCategory creado con éxito'),
-              backgroundColor: Colors.green,
-            ),
-          );
+              if (index != -1) _items[index] = savedItem;
+            });
+          } else {
+            await service.createRecord('eventos', data);
+            setState(() {
+              _items.insert(0, savedItem);
+            });
+          }
+          
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(item != null
+                    ? '$_selectedCategory actualizado correctamente'
+                    : '$_selectedCategory creado con éxito'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
         },
       ),
     );
@@ -175,20 +201,25 @@ class _EventosViewState extends State<EventosView> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
+            onPressed: () async {
+              final service = sl<MongoDBService>();
+              await service.deleteRecord('eventos', item.id);
+
               setState(() {
                 _items.removeWhere((i) => i.id == item.id);
                 if (_expandedItemId == item.id) {
                   _expandedItemId = null;
                 }
               });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('"${item.name}" eliminado correctamente'),
-                  backgroundColor: Colors.redAccent,
-                ),
-              );
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${item.name}" eliminado correctamente'),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
             },
             child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
           ),

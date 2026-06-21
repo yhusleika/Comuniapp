@@ -4,6 +4,9 @@ import 'package:timeline_tile/timeline_tile.dart';
 import 'package:data_table_2/data_table_2.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
+import 'package:intl/intl.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/mongodb_service.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -19,18 +22,73 @@ class _DashboardPageState extends State<DashboardPage> {
   String _selectedCategory = 'Global';
   double _selectedValue = 70; // Default average or global value
 
-  final Map<String, Map<String, dynamic>> _categories = {
-    'Ayudas': {'value': 85.0, 'color': Colors.blue},
-    'Censos': {'value': 60.0, 'color': Colors.green},
-    'Habitantes': {'value': 95.0, 'color': Colors.orange},
-    'Proyectos': {'value': 40.0, 'color': Colors.purple},
+  Map<String, Map<String, dynamic>> _categories = {
+    'Ayudas': {'value': 0.0, 'color': Colors.blue},
+    'Censos': {'value': 0.0, 'color': Colors.green},
+    'Habitantes': {'value': 0.0, 'color': Colors.orange},
+    'Eventos': {'value': 0.0, 'color': Colors.purple},
   };
+
+  Map<String, int> _counts = {
+    'Habitantes': 0,
+    'Ayudas': 0,
+    'Censos': 0,
+    'Eventos': 0,
+  };
+
+  List<dynamic> _recentActivity = [];
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final service = sl<MongoDBService>();
+      final data = await service.getStats();
+      
+      if (data.isNotEmpty && data['counts'] != null) {
+        final counts = data['counts'];
+        setState(() {
+          _counts = {
+            'Habitantes': counts['habitants'] ?? 0,
+            'Ayudas': counts['ayudas'] ?? 0,
+            'Censos': counts['censos'] ?? 0,
+            'Eventos': counts['eventos'] ?? 0,
+          };
+          
+          // Calcular valores de sincronización estipulados vs totales (demo realística)
+          _categories['Habitantes']!['value'] = _counts['Habitantes']! > 0 ? 100.0 : 0.0;
+          _categories['Ayudas']!['value'] = _counts['Ayudas']! > 0 ? 100.0 : 0.0;
+          _categories['Censos']!['value'] = _counts['Censos']! > 0 ? 100.0 : 0.0;
+          _categories['Eventos']!['value'] = _counts['Eventos']! > 0 ? 100.0 : 0.0;
+          
+          _recentActivity = data['recentActivity'] ?? [];
+          
+          // Re-set global average
+          _selectedValue = (_categories.values.map((e) => e['value'] as double).reduce((a, b) => a + b)) / 4;
+          if (_selectedCategory != 'Global') {
+            _selectedValue = _categories[_selectedCategory]!['value'];
+          }
+          
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching stats: $e');
+      setState(() => _isLoading = false);
+    }
+  }
 
   void _selectCategory(String category) {
     setState(() {
       if (_selectedCategory == category) {
         _selectedCategory = 'Global';
-        _selectedValue = 70; // Reset to global
+        _selectedValue = 70; // Average
       } else {
         _selectedCategory = category;
         _selectedValue = _categories[category]!['value'];
@@ -84,13 +142,7 @@ class _DashboardPageState extends State<DashboardPage> {
               children: _categories.entries.map((e) {
                 return _IndicatorCard(
                   title: e.key,
-                  value: e.key == 'Habitantes'
-                      ? '1,240'
-                      : e.key == 'Ayudas'
-                          ? '450'
-                          : e.key == 'Censos'
-                              ? '12'
-                              : '8',
+                  value: '${_counts[e.key] ?? 0}',
                   icon: e.key == 'Ayudas'
                       ? Icons.volunteer_activism_outlined
                       : e.key == 'Censos'
@@ -124,8 +176,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             _categories['Habitantes']!['color']),
                         _buildRadialAxis(
                           0.55,
-                          _categories['Proyectos']!['value'],
-                          _categories['Proyectos']!['color'],
+                          _categories['Eventos']!['value'],
+                          _categories['Eventos']!['color'],
                           annotation: GaugeAnnotation(
                             widget: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -262,21 +314,50 @@ class _DashboardPageState extends State<DashboardPage> {
             // 5. Tabla de Actividad Reciente
             _SectionContainer(
               title: 'Actividad Reciente',
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: 5,
-                separatorBuilder: (_, __) => const Divider(),
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.history)),
-                    title: Text('Registro de nuevo habitante', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
-                    subtitle: Text('Por: Ana López • Hace 10 min', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
-                    trailing:
-                        const Text('Éxito', style: TextStyle(color: Colors.green)),
-                  );
-                },
-              ),
+              child: _recentActivity.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: Text('No hay actividad reciente')),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _recentActivity.length,
+                      separatorBuilder: (_, __) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final act = _recentActivity[index];
+                        IconData icon;
+                        Color color;
+                        switch (act['type']) {
+                          case 'habitante':
+                            icon = Icons.person;
+                            color = Colors.orange;
+                            break;
+                          case 'reporte':
+                            icon = Icons.warning;
+                            color = Colors.red;
+                            break;
+                          case 'evento':
+                            icon = Icons.event;
+                            color = Colors.purple;
+                            break;
+                          default:
+                            icon = Icons.info;
+                            color = Colors.blue;
+                        }
+                        
+                        final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(act['date']).toLocal());
+                        
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: color.withOpacity(0.2),
+                            child: Icon(icon, color: color)
+                          ),
+                          title: Text(act['title'], style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                          subtitle: Text(act['subtitle'] != null ? '${act['subtitle']} • $dateStr' : dateStr, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

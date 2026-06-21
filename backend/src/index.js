@@ -20,6 +20,9 @@ app.use('/v1/habitants', require('./routes/habitants.route'));
 app.use('/v1/reports', require('./routes/reports.route'));
 app.use('/v1/censos', require('./routes/censos.route'));
 app.use('/v1/censo_records', require('./routes/censo_records.route'));
+app.use('/v1/ayudas', require('./routes/ayudas.route'));
+app.use('/v1/eventos', require('./routes/eventos.route'));
+app.use('/v1/stats', require('./routes/stats.route'));
 
 // Ruta base para comprobar que la API funciona
 app.get('/', (req, res) => {

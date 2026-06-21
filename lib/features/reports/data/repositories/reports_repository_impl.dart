@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../../core/services/mongodb_service.dart';
@@ -21,6 +22,19 @@ class ReportsRepositoryImpl implements ReportsRepository {
   @override
   Future<Either<Failure, List<Reporte>>> getReports() async {
     try {
+      final isConnected = await networkInfo.isConnected;
+      if (isConnected) {
+        try {
+          final remoteData = await mongoDBService.getRecords('reports');
+          for (final json in remoteData) {
+            final model = ReporteModel.fromJson(Map<String, dynamic>.from(json));
+            await localDataSource.cacheReporte(model);
+          }
+        } catch (e) {
+          debugPrint('Error fetching remote reports: $e');
+        }
+      }
+
       final reports = await localDataSource.getReports();
       return Right(reports);
     } catch (e) {

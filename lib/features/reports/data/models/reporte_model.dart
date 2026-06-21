@@ -103,4 +103,21 @@ class ReporteModel extends Reporte {
       'isSynced': isSynced,
     };
   }
+
+  factory ReporteModel.fromJson(Map<String, dynamic> json) {
+    return ReporteModel(
+      id: json['id'] ?? '',
+      titulo: json['titulo'] ?? '',
+      descripcion: json['descripcion'] ?? '',
+      tipo: json['tipo'] ?? '',
+      prioridad: json['prioridad'] ?? '',
+      estatus: json['estatus'] ?? '',
+      fotosPaths: json['fotosPaths'] != null ? List<String>.from(json['fotosPaths']) : [],
+      latitud: (json['latitud'] ?? 0.0).toDouble(),
+      longitud: (json['longitud'] ?? 0.0).toDouble(),
+      createdBy: json['createdBy'] ?? '',
+      fechaRegistro: DateTime.tryParse(json['fechaRegistro'] ?? '') ?? DateTime.now(),
+      isSynced: true,
+    );
+  }
 }
