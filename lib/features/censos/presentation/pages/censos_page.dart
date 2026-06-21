@@ -455,7 +455,7 @@ class _CensosViewState extends State<CensosView> {
           Theme(
             data: theme.copyWith(
               cardColor: Colors.white,
-              cardTheme: CardTheme(
+              cardTheme: CardThemeData(
                 color: Colors.white,
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,

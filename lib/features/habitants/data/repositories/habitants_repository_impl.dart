@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../../core/services/mongodb_service.dart';
@@ -21,8 +22,26 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
   @override
   Future<Either<Failure, List<Habitante>>> getHabitants(String query) async {
     try {
+      // 1. Intentar traer datos remotos de MongoDB Atlas si hay conexión
+      final isConnected = await networkInfo.isConnected;
+      if (isConnected) {
+        try {
+          final remoteData = await mongoDBService.getRecords('habitants');
+          for (final json in remoteData) {
+            final model = HabitanteModel.fromJson(Map<String, dynamic>.from(json));
+            // Guardar en Hive local (actualiza si ya existe, crea si es nuevo)
+            await localDataSource.cacheHabitante(model);
+          }
+        } catch (e) {
+          // Si falla la descarga remota, seguimos con los datos locales
+          debugPrint('Error fetching remote habitants: $e');
+        }
+      }
+
+      // 2. Leer todos los datos locales (incluye los recién descargados)
       final habitants = await localDataSource.getHabitants();
-      // Simple filtering
+      
+      // 3. Filtrar si hay query
       if (query.isNotEmpty) {
         final filtered = habitants.where((h) {
           return h.nombres.toLowerCase().contains(query.toLowerCase()) ||

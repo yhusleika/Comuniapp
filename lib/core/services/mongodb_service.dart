@@ -5,33 +5,32 @@ class MongoDBService {
   final Dio _dio;
 
   MongoDBService({Dio? dio}) : _dio = dio ?? Dio(BaseOptions(
-    baseUrl: 'https://api.comuniapp.org/v1',
+    // URL del backend local (Cambia localhost por tu IP local si usas un dispositivo físico o 10.0.2.2 para emulador Android)
+    baseUrl: 'http://localhost:3000/v1',
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
   )) {
-    // Add mock interceptor to simulate the remote MongoDB Atlas REST API
+    // Interceptor para logs reales
     _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        debugPrint('=== MONGODB REMOTE API SERVICE ===');
-        debugPrint('Request: [${options.method}] ${options.baseUrl}${options.path}');
+      onRequest: (options, handler) {
+        debugPrint('=== API REQUEST ===');
+        debugPrint('-> [${options.method}] ${options.baseUrl}${options.path}');
         if (options.data != null) {
           debugPrint('Payload: ${options.data}');
         }
-        // Simulate network latency
-        await Future.delayed(const Duration(milliseconds: 300));
-        
-        // Return a mock successful response with HTTP 200/201 and mock object details
-        final mockResponse = Response(
-          requestOptions: options,
-          statusCode: options.method == 'POST' ? 201 : 200,
-          data: {
-            'success': true,
-            'message': 'Operation simulated successfully in MongoDB Atlas REST API',
-            'data': options.data ?? {},
-          },
-        );
-        handler.resolve(mockResponse);
+        handler.next(options);
       },
+      onResponse: (response, handler) {
+        debugPrint('=== API RESPONSE ===');
+        debugPrint('<- [${response.statusCode}] ${response.requestOptions.path}');
+        debugPrint('Data: ${response.data}');
+        handler.next(response);
+      },
+      onError: (DioException e, handler) {
+        debugPrint('=== API ERROR ===');
+        debugPrint('Error: ${e.message}');
+        handler.next(e);
+      }
     ));
   }
 

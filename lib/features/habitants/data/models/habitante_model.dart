@@ -138,4 +138,26 @@ class HabitanteModel extends Habitante {
       'ayudaRecibida': ayudaRecibida,
     };
   }
+
+  factory HabitanteModel.fromJson(Map<String, dynamic> json) {
+    return HabitanteModel(
+      id: json['id'] ?? '',
+      cedula: json['cedula'] ?? '',
+      nombres: json['nombres'] ?? '',
+      apellidos: json['apellidos'] ?? '',
+      telefono: json['telefono'] ?? '',
+      sector: json['sector'] ?? '',
+      puntoReferencia: json['puntoReferencia'] ?? '',
+      tieneDiscapacidad: json['tieneDiscapacidad'] ?? false,
+      detallesDiscapacidad: json['detallesDiscapacidad'] ?? '',
+      tieneEnfermedadCronica: json['tieneEnfermedadCronica'] ?? false,
+      detallesEnfermedad: json['detallesEnfermedad'] ?? '',
+      condicionVivienda: json['condicionVivienda'] ?? '',
+      tipoVivienda: json['tipoVivienda'] ?? '',
+      registeredBy: json['registeredBy'] ?? '',
+      fechaRegistro: DateTime.tryParse(json['fechaRegistro'] ?? '') ?? DateTime.now(),
+      isSynced: true,
+      ayudaRecibida: json['ayudaRecibida'] ?? '',
+    );
+  }
 }
