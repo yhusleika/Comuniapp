@@ -18,6 +18,7 @@ import '../../domain/models/management_models.dart';
 import '../widgets/management_form_modal.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../../core/services/mongodb_service.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 class EventosPage extends StatelessWidget {
   const EventosPage({super.key});
@@ -154,11 +155,13 @@ class _EventosViewState extends State<EventosView> {
               final index = _items.indexWhere((i) => i.id == item.id);
               if (index != -1) _items[index] = savedItem;
             });
+            sl<AuditLoggerService>().log('Actualizó $_selectedCategory "${savedItem.name}"');
           } else {
             await service.createRecord('eventos', data);
             setState(() {
               _items.insert(0, savedItem);
             });
+            sl<AuditLoggerService>().log('Creó $_selectedCategory "${savedItem.name}"');
           }
           
           if (mounted) {
@@ -204,6 +207,7 @@ class _EventosViewState extends State<EventosView> {
             onPressed: () async {
               final service = sl<MongoDBService>();
               await service.deleteRecord('eventos', item.id);
+              sl<AuditLoggerService>().log('Eliminó $_selectedCategory "${item.name}"');
 
               setState(() {
                 _items.removeWhere((i) => i.id == item.id);

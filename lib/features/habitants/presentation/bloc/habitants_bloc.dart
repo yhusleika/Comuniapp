@@ -5,6 +5,8 @@ import '../../domain/usecases/get_habitants.dart';
 import '../../domain/usecases/add_habitante.dart';
 import '../../domain/usecases/update_habitante.dart';
 import '../../domain/usecases/delete_habitante.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 part 'habitants_event.dart';
 part 'habitants_state.dart';
@@ -45,6 +47,7 @@ class HabitantsBloc extends Bloc<HabitantsEvent, HabitantsState> {
       (failure) => emit(HabitantsError(failure.message)),
       (_) {
         emit(HabitanteOperationSuccess());
+        sl<AuditLoggerService>().log('Registró al habitante "${event.habitante.nombres} ${event.habitante.apellidos}"');
         add(const LoadHabitants());
       },
     );
@@ -58,6 +61,7 @@ class HabitantsBloc extends Bloc<HabitantsEvent, HabitantsState> {
       (failure) => emit(HabitantsError(failure.message)),
       (_) {
         emit(HabitanteOperationSuccess());
+        sl<AuditLoggerService>().log('Modificó al habitante "${event.habitante.nombres} ${event.habitante.apellidos}"');
         add(const LoadHabitants());
       },
     );
@@ -70,6 +74,7 @@ class HabitantsBloc extends Bloc<HabitantsEvent, HabitantsState> {
       (failure) => emit(HabitantsError(failure.message)),
       (_) {
         emit(HabitanteOperationSuccess());
+        sl<AuditLoggerService>().log('Eliminó un habitante con ID "${event.id}"');
         add(const LoadHabitants());
       },
     );

@@ -23,6 +23,7 @@ app.use('/v1/censo_records', require('./routes/censo_records.route'));
 app.use('/v1/ayudas', require('./routes/ayudas.route'));
 app.use('/v1/eventos', require('./routes/eventos.route'));
 app.use('/v1/stats', require('./routes/stats.route'));
+app.use('/v1/auditoria', require('./routes/auditoria.route'));
 
 // Ruta base para comprobar que la API funciona
 app.get('/', (req, res) => {

@@ -3,6 +3,8 @@ import '../../../../core/usecases/usecase.dart';
 import '../bloc/censos_event.dart';
 import '../bloc/censos_state.dart';
 import '../../domain/usecases/censos_usecases.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 class CensosBloc extends Bloc<CensosEvent, CensosState> {
   final GetCensos getCensos;
@@ -45,6 +47,7 @@ class CensosBloc extends Bloc<CensosEvent, CensosState> {
       (failure) => emit(CensoError(failure.message)),
       (_) {
         emit(CensoOperationSuccess());
+        sl<AuditLoggerService>().log('Creó el censo "${event.censo.nombre}"');
         add(LoadCensos());
       },
     );
@@ -67,6 +70,7 @@ class CensosBloc extends Bloc<CensosEvent, CensosState> {
       (failure) => emit(CensoError(failure.message)),
       (_) {
         emit(CensoOperationSuccess());
+        sl<AuditLoggerService>().log('Agregó un registro al censo "${event.record.censoId}"');
         add(LoadCensoRecords(event.record.censoId));
       },
     );
@@ -79,6 +83,7 @@ class CensosBloc extends Bloc<CensosEvent, CensosState> {
       (failure) => emit(CensoError(failure.message)),
       (_) {
         emit(CensoOperationSuccess());
+        sl<AuditLoggerService>().log('Actualizó un registro del censo "${event.record.censoId}"');
         add(LoadCensoRecords(event.record.censoId));
       },
     );
@@ -92,7 +97,10 @@ class CensosBloc extends Bloc<CensosEvent, CensosState> {
     final result = await deleteCensoRecord(event.id);
     result.fold(
       (failure) => emit(CensoError(failure.message)),
-      (_) => emit(CensoOperationSuccess()),
+      (_) {
+        emit(CensoOperationSuccess());
+        sl<AuditLoggerService>().log('Eliminó el registro de censo "${event.id}"');
+      },
     );
   }
 }

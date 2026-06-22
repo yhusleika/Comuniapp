@@ -6,6 +6,8 @@ import '../../domain/usecases/update_ayuda_type.dart';
 import '../../domain/usecases/delete_ayuda_type.dart';
 import 'ayudas_event.dart';
 import 'ayudas_state.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 class AyudasBloc extends Bloc<AyudasEvent, AyudasState> {
   final GetAyudaTypes getAyudaTypes;
@@ -42,6 +44,7 @@ class AyudasBloc extends Bloc<AyudasEvent, AyudasState> {
       (failure) => emit(AyudasError(failure.message)),
       (_) {
         emit(AyudaOperationSuccess());
+        sl<AuditLoggerService>().log('Creó la ayuda social "${event.ayudaType.nombre}"');
         add(LoadAyudaTypes());
       },
     );
@@ -54,6 +57,7 @@ class AyudasBloc extends Bloc<AyudasEvent, AyudasState> {
       (failure) => emit(AyudasError(failure.message)),
       (_) {
         emit(AyudaOperationSuccess());
+        sl<AuditLoggerService>().log('Modificó la ayuda social "${event.ayudaType.nombre}"');
         add(LoadAyudaTypes());
       },
     );
@@ -66,6 +70,7 @@ class AyudasBloc extends Bloc<AyudasEvent, AyudasState> {
       (failure) => emit(AyudasError(failure.message)),
       (_) {
         emit(AyudaOperationSuccess());
+        sl<AuditLoggerService>().log('Eliminó una ayuda social con ID "${event.id}"');
         add(LoadAyudaTypes());
       },
     );

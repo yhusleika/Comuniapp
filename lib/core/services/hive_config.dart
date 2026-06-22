@@ -5,6 +5,7 @@ import '../../features/reports/data/models/reporte_model.dart';
 import '../../features/ayudas/data/models/ayuda_type_model.dart';
 import '../../features/censos/data/models/censo_model.dart';
 import '../../features/censos/data/models/censo_record_model.dart';
+import '../../features/auditoria/data/models/audit_log_model.dart';
 
 class HiveConfig {
   static Future<void> init() async {
@@ -22,6 +23,7 @@ class HiveConfig {
     Hive.registerAdapter(AyudaTypeModelAdapter());
     Hive.registerAdapter(CensoModelAdapter());
     Hive.registerAdapter(CensoRecordModelAdapter());
+    Hive.registerAdapter(AuditLogModelAdapter());
   }
 
   static const String habitantsBox = 'habitants';
@@ -31,4 +33,5 @@ class HiveConfig {
   static const String ayudasBox = 'ayudas_types';
   static const String censosBox = 'censos';
   static const String censoRecordsBox = 'censo_records';
+  static const String auditoriaBox = 'auditoria_logs';
 }

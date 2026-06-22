@@ -12,28 +12,32 @@ import '../../../../shared/widgets/side_menu.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../../core/utils/file_saver.dart';
 
-class AuditLog {
-  final String user;
-  final String role;
-  final String action;
-  final DateTime dateTime;
+import '../../domain/entities/audit_log.dart';
+import '../bloc/auditoria_bloc.dart';
+import '../bloc/auditoria_event.dart';
+import '../bloc/auditoria_state.dart';
+import '../../../../core/di/injection_container.dart';
 
-  AuditLog({
-    required this.user,
-    required this.role,
-    required this.action,
-    required this.dateTime,
-  });
-}
-
-class AuditoriaPage extends StatefulWidget {
+class AuditoriaPage extends StatelessWidget {
   const AuditoriaPage({super.key});
 
   @override
-  State<AuditoriaPage> createState() => _AuditoriaPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => sl<AuditoriaBloc>()..add(const LoadAuditLogs()),
+      child: const AuditoriaView(),
+    );
+  }
 }
 
-class _AuditoriaPageState extends State<AuditoriaPage> {
+class AuditoriaView extends StatefulWidget {
+  const AuditoriaView({super.key});
+
+  @override
+  State<AuditoriaView> createState() => _AuditoriaViewState();
+}
+
+class _AuditoriaViewState extends State<AuditoriaView> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final List<AuditLog> _logs = [];
 
@@ -76,45 +80,6 @@ class _AuditoriaPageState extends State<AuditoriaPage> {
   @override
   void initState() {
     super.initState();
-    // Beautiful predefined mock audit logs representing recent actions
-    _logs.addAll([
-      AuditLog(
-        user: 'admin (a.colmenarez@comuniapp.org)',
-        role: 'Admin',
-        action: 'Creó el Censo "Censo Poblacional Central 2026"',
-        dateTime: DateTime.now().subtract(const Duration(minutes: 15)),
-      ),
-      AuditLog(
-        user: 'admin (a.colmenarez@comuniapp.org)',
-        role: 'Admin',
-        action: 'Agregó 5 habitantes al Censo Poblacional Central',
-        dateTime: DateTime.now().subtract(const Duration(minutes: 18)),
-      ),
-      AuditLog(
-        user: 'admin (a.colmenarez@comuniapp.org)',
-        role: 'Admin',
-        action: 'Creó la Ayuda Social "Ayuda Alimentaria Extra"',
-        dateTime: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      AuditLog(
-        user: 'Gabriela Mendoza (g.mendoza@comuniapp.org)',
-        role: 'Operador',
-        action: 'Bloqueó al usuario "Ricardo Espinoza"',
-        dateTime: DateTime.now().subtract(const Duration(hours: 5)),
-      ),
-      AuditLog(
-        user: 'admin (a.colmenarez@comuniapp.org)',
-        role: 'Admin',
-        action: 'Modificó datos del habitante "Pedro Infante"',
-        dateTime: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      AuditLog(
-        user: 'Gabriela Mendoza (g.mendoza@comuniapp.org)',
-        role: 'Operador',
-        action: 'Creó el Proyecto "Mantenimiento Parque"',
-        dateTime: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-    ]);
   }
 
   Future<void> _exportAuditToPDF() async {
@@ -357,11 +322,28 @@ class _AuditoriaPageState extends State<AuditoriaPage> {
 
     return CustomScaffold(
       drawer: SideMenu(scaffoldKey: scaffoldKey),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
+      child: BlocConsumer<AuditoriaBloc, AuditoriaState>(
+        listener: (context, state) {
+          if (state is AuditoriaError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${state.message}'), backgroundColor: Colors.red),
+            );
+          } else if (state is AuditoriaLoaded) {
+            setState(() {
+              _logs.clear();
+              _logs.addAll(state.logs);
+            });
+          }
+        },
+        builder: (context, state) {
+          if (state is AuditoriaLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
               // Responsive Header
               Wrap(
                 alignment: WrapAlignment.spaceBetween,
@@ -733,6 +715,8 @@ class _AuditoriaPageState extends State<AuditoriaPage> {
             ],
           ),
         ),
+          );
+        },
       ),
     );
   }

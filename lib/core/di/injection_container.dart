@@ -45,6 +45,13 @@ import '../../core/services/sync_manager.dart';
 import '../../core/services/mongodb_service.dart';
 import '../../core/theme/theme_cubit.dart';
 import '../../core/network/network_info.dart';
+import '../../core/services/audit_logger_service.dart';
+
+import '../../features/auditoria/domain/repositories/auditoria_repository.dart';
+import '../../features/auditoria/data/repositories/auditoria_repository_impl.dart';
+import '../../features/auditoria/data/datasources/auditoria_local_data_source.dart';
+import '../../features/auditoria/domain/usecases/auditoria_usecases.dart';
+import '../../features/auditoria/presentation/bloc/auditoria_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -176,6 +183,25 @@ Future<void> init() async {
   sl.registerLazySingleton<CensosLocalDataSource>(
       () => CensosLocalDataSourceImpl());
 
+  // ! Features - Auditoria
+  // Bloc
+  sl.registerFactory(() => AuditoriaBloc(getAuditLogs: sl()));
+
+  // Use cases
+  sl.registerLazySingleton(() => GetAuditLogs(sl()));
+  sl.registerLazySingleton(() => AddAuditLog(sl()));
+
+  // Repository
+  sl.registerLazySingleton<AuditoriaRepository>(() => AuditoriaRepositoryImpl(
+        localDataSource: sl(),
+        networkInfo: sl(),
+        mongoDBService: sl(),
+      ));
+
+  // Data sources
+  sl.registerLazySingleton<AuditoriaLocalDataSource>(
+      () => AuditoriaLocalDataSourceImpl());
+
   // ! Core
   sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
 
@@ -184,6 +210,10 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ImageCompressionService());
   sl.registerLazySingleton(() => MongoDBService());
   sl.registerLazySingleton(() => ThemeCubit());
+  sl.registerLazySingleton(() => AuditLoggerService(
+        authBloc: sl(),
+        addAuditLog: sl(),
+      ));
 
   // Sync
   sl.registerLazySingleton(() => SyncManager(

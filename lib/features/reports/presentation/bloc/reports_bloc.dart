@@ -4,6 +4,8 @@ import '../../domain/entities/reporte.dart';
 import '../../domain/usecases/get_reports.dart';
 import '../../domain/usecases/create_report.dart';
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 part 'reports_event.dart';
 part 'reports_state.dart';
@@ -36,6 +38,7 @@ class ReportsBloc extends Bloc<ReportsEvent, ReportsState> {
       (failure) => emit(ReportsError(failure.message)),
       (_) {
         emit(ReportOperationSuccess());
+        sl<AuditLoggerService>().log('Registró el reporte "${event.reporte.titulo}"');
         add(LoadReports());
       },
     );
