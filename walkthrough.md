@@ -30,3 +30,21 @@ A continuación, un resumen de los cambios implementados:
 > 2. Prueba los módulos de Censos, Ayudas y Proyectos. Guarda un registro nuevo.
 > 3. Cierra la app y vuelve a abrirla; los datos de Proyectos se mantendrán ya que se extraen en tiempo real de MongoDB.
 > 4. Ve al Dashboard y verás la actividad reciente y los contadores actualizados.
+
+## Solución al error de conexión en APK (Dispositivos Móviles)
+
+Hemos implementado los siguientes cambios para corregir el problema de conexión con la base de datos cuando la aplicación se ejecuta desde un APK en un dispositivo móvil:
+
+1. **Permiso de Internet en el APK final (`AndroidManifest.xml` principal):**
+   - Agregamos `<uses-permission android:name="android.permission.INTERNET"/>` en [AndroidManifest.xml](file:///home/balthazar/Documentos/GitHub/Comuniapp/android/app/src/main/AndroidManifest.xml). Por defecto, Flutter incluye este permiso en las versiones de depuración (`debug`) y perfil (`profile`), pero no en la versión principal (`main`/`release`). Sin esto, el APK de lanzamiento no tiene permisos de Android para realizar peticiones de red.
+
+2. **Permitir tráfico Cleartext (HTTP sin cifrar):**
+   - Agregamos `android:usesCleartextTraffic="true"` en la etiqueta `<application>` del archivo [AndroidManifest.xml](file:///home/balthazar/Documentos/GitHub/Comuniapp/android/app/src/main/AndroidManifest.xml). A partir de Android 9 (API 28), el sistema operativo móvil bloquea por defecto las conexiones HTTP sin cifrar (como `http://192.168.x.x:3000`). Con esta configuración permitimos el tráfico HTTP para el entorno de pruebas local.
+
+3. **URL de API Configurable (`mongodb_service.dart`):**
+   - Modificamos el archivo [mongodb_service.dart](file:///home/balthazar/Documentos/GitHub/Comuniapp/lib/core/services/mongodb_service.dart) para que la URL base de la API no esté fija en `localhost:3000`. Cuando compilas un APK y lo ejecutas en tu celular, `localhost` apunta al mismo teléfono y no a tu computadora, lo cual causaba el error de conexión.
+   - Ahora el código usa `const String.fromEnvironment('API_BASE_URL', ...)` para poder definir dinámicamente la dirección del servidor al compilar o ejecutar la app.
+   - De forma predeterminada:
+     - En el emulador de Android apuntará a `http://10.0.2.2:3000/v1` (el alias que usa Android para conectarse a la PC host).
+     - En la Web y emulador de iOS/fallback apuntará a `http://localhost:3000/v1`.
+     - Para un dispositivo físico o APK compilado, puedes configurar la IP local de tu PC de desarrollo.

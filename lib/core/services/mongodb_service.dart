@@ -4,12 +4,39 @@ import 'package:flutter/foundation.dart';
 class MongoDBService {
   final Dio _dio;
 
+  /// Determina la URL base de la API según el entorno.
+  /// 
+  /// Prioridad:
+  /// 1. Si se pasa --dart-define=API_BASE_URL=..., se usa esa URL.
+  /// 2. En debug web: http://localhost:3000/v1
+  /// 3. En debug Android (emulador): http://10.0.2.2:3000/v1
+  /// 4. En release (APK producción): URL pública de Render.com
+  static String get _defaultBaseUrl {
+    // Si el usuario pasó una URL explícita via --dart-define, usarla
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+
+    if (kDebugMode) {
+      // Desarrollo local
+      return kIsWeb 
+          ? 'http://localhost:3000/v1' 
+          : 'http://10.0.2.2:3000/v1';
+    }
+    
+    // ===== PRODUCCIÓN =====
+    // TODO: Reemplaza esta URL con la de tu servicio en Render.com
+    // Ejemplo: https://comuniapp-api.onrender.com/v1
+    return 'https://comuniapp-cmpr.onrender.com/v1';
+  }
+
   MongoDBService({Dio? dio}) : _dio = dio ?? Dio(BaseOptions(
-    // URL del backend local (Cambia localhost por tu IP local si usas un dispositivo físico o 10.0.2.2 para emulador Android)
-    baseUrl: 'http://localhost:3000/v1',
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 5),
+    baseUrl: _defaultBaseUrl,
+    // Timeouts más largos para el tier gratuito de Render (cold start ~30s)
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 30),
   )) {
+    debugPrint('🌐 API Base URL: ${_dio.options.baseUrl}');
+    
     // Interceptor para logs reales
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -29,6 +56,7 @@ class MongoDBService {
       onError: (DioException e, handler) {
         debugPrint('=== API ERROR ===');
         debugPrint('Error: ${e.message}');
+        debugPrint('URL: ${e.requestOptions.baseUrl}${e.requestOptions.path}');
         handler.next(e);
       }
     ));

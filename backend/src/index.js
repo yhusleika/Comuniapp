@@ -13,7 +13,13 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Log de peticiones (útil para depurar en producción)
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
 
 // Rutas
 app.use('/v1/habitants', require('./routes/habitants.route'));
@@ -30,8 +36,13 @@ app.get('/', (req, res) => {
     res.json({ message: 'Bienvenido a la API de Comuniapp' });
 });
 
+// Health check para Render y monitoreo
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-    console.log(`Servidor corriendo en el puerto ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor corriendo en el puerto ${PORT} (0.0.0.0)`);
 });

@@ -1,11 +1,14 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "API REST para Comuniapp - Gestión comunitaria",
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",
