@@ -5,9 +5,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:printing/printing.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
 import '../../../../core/utils/file_saver.dart';
@@ -16,9 +18,10 @@ import '../../../habitants/presentation/bloc/habitants_bloc.dart';
 import '../../../habitants/domain/entities/habitante.dart';
 import '../../domain/models/management_models.dart';
 import '../widgets/management_form_modal.dart';
+import '../../domain/repositories/eventos_repository.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../../core/services/mongodb_service.dart';
 import '../../../../core/services/audit_logger_service.dart';
+import '../../../../core/services/mongodb_service.dart';
 
 class EventosPage extends StatelessWidget {
   const EventosPage({super.key});
@@ -53,6 +56,21 @@ class _EventosViewState extends State<EventosView> {
   // Controllers
   final _searchController = TextEditingController();
 
+  String _resolveImagePath(String path) {
+    if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('assets/') || path.startsWith('data:')) {
+      return path;
+    }
+    try {
+      final baseUrl = sl<MongoDBService>().dio.options.baseUrl;
+      final uri = Uri.parse(baseUrl);
+      final cleanPath = path.startsWith('/') ? path : '/$path';
+      return '${uri.scheme}://${uri.host}:${uri.port}$cleanPath';
+    } catch (e) {
+      debugPrint('Error resolving image path $path: $e');
+    }
+    return path;
+  }
+
   // Mock Data replaced by remote fetching
   List<ManagementItem> _items = [];
 
@@ -64,23 +82,16 @@ class _EventosViewState extends State<EventosView> {
 
   Future<void> _loadItems() async {
     try {
-      final service = sl<MongoDBService>();
-      final remoteData = await service.getRecords('eventos');
-      
-      setState(() {
-        _items = remoteData.map((json) => ManagementItem(
-          id: json['id'],
-          name: json['name'],
-          date: DateTime.parse(json['date']),
-          description: json['description'] ?? '',
-          responsible: json['responsible'],
-          category: json['category'],
-          progress: (json['progress'] ?? 0.0).toDouble(),
-          status: json['status'] ?? 'Pendiente',
-          attendeeNames: List<String>.from(json['attendeeNames'] ?? []),
-          photos: List<String>.from(json['photos'] ?? []),
-        )).toList();
-      });
+      final repository = sl<EventosRepository>();
+      final result = await repository.getEventos();
+      result.fold(
+        (failure) => debugPrint('Error loading eventos: ${failure.message}'),
+        (items) {
+          setState(() {
+            _items = items;
+          });
+        },
+      );
     } catch (e) {
       debugPrint('Error loading eventos: $e');
     }
@@ -103,12 +114,9 @@ class _EventosViewState extends State<EventosView> {
   }
 
   Future<void> _saveStatusChanges() async {
-    final service = sl<MongoDBService>();
+    final repository = sl<EventosRepository>();
     for (final item in _items) {
-      await service.updateRecord('eventos', item.id, {
-        'status': item.status,
-        'progress': item.progress,
-      });
+      await repository.updateEvento(item);
     }
 
     setState(() {
@@ -125,39 +133,29 @@ class _EventosViewState extends State<EventosView> {
   }
 
   void _showManagementModal({ManagementItem? item}) {
-    final habitantsState = context.read<HabitantsBloc>().state;
+    final habitantsBloc = context.read<HabitantsBloc>();
+    final habitantsState = habitantsBloc.state;
     final allHabitants = habitantsState is HabitantsLoaded ? habitantsState.habitants : <Habitante>[];
 
     showDialog(
       context: context,
-      builder: (_) => ManagementFormModal(
+      builder: (_) => BlocProvider.value(
+        value: habitantsBloc,
+        child: ManagementFormModal(
         item: item,
         category: _selectedCategory,
         allHabitants: allHabitants,
         onSave: (savedItem) async {
-          final service = sl<MongoDBService>();
-          final Map<String, dynamic> data = {
-            'id': savedItem.id,
-            'name': savedItem.name,
-            'date': savedItem.date.toIso8601String(),
-            'description': savedItem.description,
-            'responsible': savedItem.responsible,
-            'category': savedItem.category,
-            'progress': savedItem.progress,
-            'status': savedItem.status,
-            'attendeeNames': savedItem.attendeeNames,
-            'photos': savedItem.photos,
-          };
-
+          final repository = sl<EventosRepository>();
           if (item != null) {
-            await service.updateRecord('eventos', savedItem.id, data);
+            await repository.updateEvento(savedItem);
             setState(() {
               final index = _items.indexWhere((i) => i.id == item.id);
               if (index != -1) _items[index] = savedItem;
             });
             sl<AuditLoggerService>().log('Actualizó $_selectedCategory "${savedItem.name}"');
           } else {
-            await service.createRecord('eventos', data);
+            await repository.addEvento(savedItem);
             setState(() {
               _items.insert(0, savedItem);
             });
@@ -177,8 +175,9 @@ class _EventosViewState extends State<EventosView> {
           }
         },
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _confirmDeleteItem(ManagementItem item) {
     showDialog(
@@ -204,10 +203,10 @@ class _EventosViewState extends State<EventosView> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              final service = sl<MongoDBService>();
-              await service.deleteRecord('eventos', item.id);
-              sl<AuditLoggerService>().log('Eliminó $_selectedCategory "${item.name}"');
+          onPressed: () async {
+            final repository = sl<EventosRepository>();
+            await repository.deleteEvento(item.id);
+            sl<AuditLoggerService>().log('Eliminó $_selectedCategory "${item.name}"');
 
               setState(() {
                 _items.removeWhere((i) => i.id == item.id);
@@ -353,11 +352,25 @@ class _EventosViewState extends State<EventosView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
-    final isAuditor = authState is AuthAuthenticated && authState.user.role.toLowerCase() == 'auditor';
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final userRole = (user?.role ?? '').toLowerCase().trim();
+    final username = (user?.username ?? '').toLowerCase().trim();
+
+    final isVisor = userRole.contains('visor') ||
+        userRole.contains('auditor') ||
+        username.contains('visor') ||
+        username.contains('auditor') ||
+        userRole.isEmpty;
+    final isOperador = !isVisor && userRole.contains('operador');
+    final isAdmin = !isVisor && (userRole.contains('admin') || userRole.contains('vocero') || username.contains('admin'));
+
+    final canCreate = !isVisor && (isOperador || isAdmin);
+    final canEdit = !isVisor && (isOperador || isAdmin);
+    final canDelete = isAdmin;
 
     return CustomScaffold(
       drawer: SideMenu(scaffoldKey: scaffoldKey),
-      floatingActionButton: _hasUnsavedChanges && !isAuditor
+      floatingActionButton: _hasUnsavedChanges && canEdit
           ? FloatingActionButton.extended(
               onPressed: _saveStatusChanges,
               backgroundColor: theme.colorScheme.secondary,
@@ -372,7 +385,7 @@ class _EventosViewState extends State<EventosView> {
             // Responsive Header (unifying colors)
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: _buildHeader(context, isAuditor),
+              child: _buildHeader(context, canCreate),
             ),
 
             // Navigation Tabs
@@ -440,14 +453,14 @@ class _EventosViewState extends State<EventosView> {
             const SizedBox(height: 16),
 
             // List of Items
-            _buildListView(theme, isAuditor),
+            _buildListView(theme, canCreate, canEdit, canDelete),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isAuditor) {
+  Widget _buildHeader(BuildContext context, bool canCreate) {
     final theme = Theme.of(context);
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
@@ -507,7 +520,7 @@ class _EventosViewState extends State<EventosView> {
                 ),
               ),
             ),
-            if (!isAuditor) ...[
+            if (canCreate) ...[
               const SizedBox(width: 8),
               // Add Button (Circular and Premium)
               Tooltip(
@@ -532,7 +545,7 @@ class _EventosViewState extends State<EventosView> {
     );
   }
 
-  Widget _buildListView(ThemeData theme, bool isAuditor) {
+  Widget _buildListView(ThemeData theme, bool canCreate, bool canEdit, bool canDelete) {
     final list = _filteredItems;
 
     if (list.isEmpty) {
@@ -624,7 +637,7 @@ class _EventosViewState extends State<EventosView> {
                   () => _expandedItemId = isExpanded ? null : item.id,
                 ),
               ),
-              if (isExpanded) _buildExpandedForm(item, theme, isAuditor),
+              if (isExpanded) _buildExpandedForm(item, theme, canEdit, canDelete),
             ],
           ),
         );
@@ -632,7 +645,7 @@ class _EventosViewState extends State<EventosView> {
     );
   }
 
-  Widget _buildExpandedForm(ManagementItem item, ThemeData theme, bool isAuditor) {
+  Widget _buildExpandedForm(ManagementItem item, ThemeData theme, bool canEdit, bool canDelete) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Container(
@@ -652,7 +665,7 @@ class _EventosViewState extends State<EventosView> {
                 style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
               ),
               const SizedBox(width: 12),
-              isAuditor
+              !canEdit
                   ? Text(
                       item.status,
                       style: TextStyle(
@@ -748,9 +761,9 @@ class _EventosViewState extends State<EventosView> {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: kIsWeb
-                        ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
+                        ? Image.network(_resolveImagePath(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
                         : (path.startsWith('http') || path.startsWith('assets/'))
-                            ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
+                            ? Image.network(_resolveImagePath(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
                             : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image)),
                   );
                 },
@@ -765,7 +778,7 @@ class _EventosViewState extends State<EventosView> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () =>
-                            context.push('/eventos/details', extra: item),
+                            context.push('/eventos/details', extra: item).then((_) => _loadItems()),
                         icon: const Icon(Icons.table_chart_outlined),
                         label: const Text('Ver Datos'),
                         style: ElevatedButton.styleFrom(
@@ -774,7 +787,7 @@ class _EventosViewState extends State<EventosView> {
                             padding: const EdgeInsets.all(14)),
                       ),
                     ),
-                    if (!isAuditor) ...[
+                    if (canEdit) ...[
                       const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
@@ -788,6 +801,8 @@ class _EventosViewState extends State<EventosView> {
                               padding: const EdgeInsets.all(14)),
                         ),
                       ),
+                    ],
+                    if (canDelete) ...[
                       const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
@@ -809,7 +824,7 @@ class _EventosViewState extends State<EventosView> {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () =>
-                            context.push('/eventos/details', extra: item),
+                            context.push('/eventos/details', extra: item).then((_) => _loadItems()),
                         icon: const Icon(Icons.table_chart_outlined),
                         label: const Text('Ver Datos'),
                         style: ElevatedButton.styleFrom(
@@ -817,7 +832,7 @@ class _EventosViewState extends State<EventosView> {
                             foregroundColor: Colors.white),
                       ),
                     ),
-                    if (!isAuditor) ...[
+                    if (canEdit) ...[
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
@@ -829,6 +844,8 @@ class _EventosViewState extends State<EventosView> {
                               foregroundColor: Colors.white),
                         ),
                       ),
+                    ],
+                    if (canDelete) ...[
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(

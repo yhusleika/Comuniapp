@@ -1,3 +1,31 @@
+class Avance {
+  final String descripcion;
+  final DateTime fecha;
+  final List<String> fotos;
+  final double progress;
+
+  Avance({
+    required this.descripcion,
+    required this.fecha,
+    this.fotos = const [],
+    this.progress = 0.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'descripcion': descripcion,
+    'fecha': fecha.toIso8601String(),
+    'fotos': fotos,
+    'progress': progress,
+  };
+
+  factory Avance.fromJson(Map<String, dynamic> json) => Avance(
+    descripcion: json['descripcion'] ?? '',
+    fecha: json['fecha'] != null ? DateTime.parse(json['fecha'].toString()) : DateTime.now(),
+    fotos: List<String>.from(json['fotos'] ?? []),
+    progress: (json['progress'] ?? 0.0).toDouble(),
+  );
+}
+
 class ManagementItem {
   final String id;
   final String name;
@@ -9,6 +37,8 @@ class ManagementItem {
   final String status; // 'Pendiente', 'En Proceso', 'Completado'
   final List<String> attendeeNames;
   final List<String> photos;
+  final List<Avance> avances;
+  final bool isSynced;
 
   ManagementItem({
     required this.id,
@@ -21,6 +51,8 @@ class ManagementItem {
     this.status = 'Pendiente',
     this.attendeeNames = const [],
     this.photos = const [],
+    this.avances = const [],
+    this.isSynced = false,
   });
 
   ManagementItem copyWith({
@@ -34,6 +66,8 @@ class ManagementItem {
     String? status,
     List<String>? attendeeNames,
     List<String>? photos,
+    List<Avance>? avances,
+    bool? isSynced,
   }) {
     return ManagementItem(
       id: id ?? this.id,
@@ -46,6 +80,8 @@ class ManagementItem {
       status: status ?? this.status,
       attendeeNames: attendeeNames ?? this.attendeeNames,
       photos: photos ?? this.photos,
+      avances: avances ?? this.avances,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'sync_status_banner.dart';
+
 class CustomScaffold extends StatelessWidget {
   const CustomScaffold({
     super.key,
@@ -35,7 +37,12 @@ class CustomScaffold extends StatelessWidget {
               height: double.infinity,
             ),
             SafeArea(
-              child: child,
+              child: Column(
+                children: [
+                  const SyncStatusBanner(),
+                  Expanded(child: child),
+                ],
+              ),
             )
           ],
         ));

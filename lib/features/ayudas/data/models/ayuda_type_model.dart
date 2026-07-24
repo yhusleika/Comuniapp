@@ -17,17 +17,23 @@ class AyudaTypeModel extends AyudaType {
   @override
   final String responsable;
 
+  @HiveField(3)
+  @override
+  final String descripcion;
+
   const AyudaTypeModel({
     required this.id,
     required this.nombre,
     required this.responsable,
-  }) : super(id: id, nombre: nombre, responsable: responsable);
+    this.descripcion = '',
+  }) : super(id: id, nombre: nombre, responsable: responsable, descripcion: descripcion);
 
   factory AyudaTypeModel.fromEntity(AyudaType entity) {
     return AyudaTypeModel(
       id: entity.id,
       nombre: entity.nombre,
       responsable: entity.responsable,
+      descripcion: entity.descripcion,
     );
   }
 
@@ -36,6 +42,7 @@ class AyudaTypeModel extends AyudaType {
       id: id,
       nombre: nombre,
       responsable: responsable,
+      descripcion: descripcion,
     );
   }
 
@@ -44,6 +51,7 @@ class AyudaTypeModel extends AyudaType {
       'id': id,
       'nombre': nombre,
       'responsable': responsable,
+      'descripcion': descripcion,
     };
   }
 
@@ -52,6 +60,7 @@ class AyudaTypeModel extends AyudaType {
       id: json['id'] ?? '',
       nombre: json['nombre'] ?? '',
       responsable: json['responsable'] ?? '',
+      descripcion: json['descripcion'] ?? '',
     );
   }
 }

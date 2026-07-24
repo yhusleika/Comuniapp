@@ -5,6 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../../domain/entities/censo.dart';
 import '../../domain/entities/censo_record.dart';
 import '../../domain/entities/censo_fields_dictionary.dart';
+import '../../../habitants/domain/entities/habitante.dart';
+import '../../../habitants/presentation/widgets/search_habitante_modal.dart';
+import '../../../habitants/presentation/bloc/habitants_bloc.dart';
 import '../bloc/censos_bloc.dart';
 import '../bloc/censos_event.dart';
 
@@ -12,12 +15,16 @@ class CensoRecordFormModal extends StatefulWidget {
   final Censo censo;
   final CensoRecord? record;
   final bool isPreview;
+  final int? nextNumEncuesta;
+  final List<Habitante> allHabitants;
 
   const CensoRecordFormModal({
     super.key,
     required this.censo,
     this.record,
     this.isPreview = false,
+    this.nextNumEncuesta,
+    required this.allHabitants,
   });
 
   @override
@@ -75,12 +82,20 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
     // Determine Jefe de familia
     String jefeNombre = 'Sin Nombre';
     String jefeCedula = '';
+    String? jefeHabitanteId;
     
     try {
       final jefe = _familyMembers.firstWhere((p) => p['es_jefe_familia'] == 'Sí', orElse: () => _familyMembers.isNotEmpty ? _familyMembers.first : {});
       jefeNombre = jefe['jefeFamilia']?.toString() ?? 'Sin Nombre';
       jefeCedula = jefe['cedula']?.toString() ?? '';
+      jefeHabitanteId = jefe['habitanteId']?.toString();
     } catch (_) {}
+
+    if (jefeHabitanteId != null) {
+      _formData['jefeHabitanteId'] = jefeHabitanteId;
+    } else {
+      _formData.remove('jefeHabitanteId');
+    }
 
     final newRecord = CensoRecord(
       id: widget.record?.id ?? const Uuid().v4(),
@@ -92,6 +107,7 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
       numeroHijos: _familyMembers.where((f) => f['parentesco']?.toString().toLowerCase().contains('hijo') == true).length,
       estatus: _formData['estatus']?.toString() ?? 'Censados',
       datosDinamicos: Map<String, dynamic>.from(_formData),
+      numEncuesta: widget.record?.numEncuesta ?? widget.nextNumEncuesta,
     );
 
     if (widget.record != null) {
@@ -357,23 +373,65 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
               runSpacing: 10,
               children: [
                 const Text('Datos de Personas', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _familyMembers.add({'es_jefe_familia': 'No'});
-                    });
-                  },
-                  icon: const Icon(Icons.person_add, size: 16),
-                  label: const Text('Agregar Integrante'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _familyMembers.add({
+                            'widget_key': const Uuid().v4(),
+                            'es_jefe_familia': _familyMembers.isEmpty ? 'Sí' : 'No'
+                          });
+                        });
+                      },
+                      icon: const Icon(Icons.person_add, size: 16),
+                      label: const Text('Agregar Integrante'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final hState = context.read<HabitantsBloc>().state;
+                        final hList = hState is HabitantsLoaded ? hState.habitants : widget.allHabitants;
+                        final selected = await showDialog<List<Habitante>>(
+                          context: context,
+                          builder: (dialogCtx) => SearchHabitanteModal(
+                            allHabitants: hList,
+                            multiSelect: false,
+                          ),
+                        );
+                        if (selected != null && selected.isNotEmpty) {
+                          final h = selected.first;
+                          setState(() {
+                            _familyMembers.add({
+                              'widget_key': const Uuid().v4(),
+                              'es_jefe_familia': _familyMembers.isEmpty ? 'Sí' : 'No',
+                              'jefeFamilia': '${h.nombres} ${h.apellidos}',
+                              'cedula': h.cedula,
+                              'telefono': h.telefono,
+                              'habitanteId': h.id,
+                            });
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.person_search, size: 16),
+                      label: const Text('Buscar Habitante'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF416FDF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+                      ),
+                    ),
+                  ],
                 )
               ],
             ),
             const Divider(color: Colors.black12),
             if (_familyMembers.isEmpty)
-               const Text('Sin integrantes. Presione "Agregar Integrante".', style: TextStyle(color: Colors.black54)),
+               const Text('Sin integrantes. Presione "Agregar Integrante" o "Buscar Habitante".', style: TextStyle(color: Colors.black54)),
             ..._familyMembers.asMap().entries.map((entry) {
               int index = entry.key;
               Map<String, dynamic> member = entry.value;
@@ -381,6 +439,7 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
               final fieldChunks = _chunkList(_personasFields, 2);
 
               return Container(
+                key: ValueKey(member['widget_key'] ?? 'member_$index'),
                 margin: const EdgeInsets.only(bottom: 15),
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
@@ -394,13 +453,43 @@ class _CensoRecordFormModalState extends State<CensoRecordFormModal> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Integrante #${index + 1}', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              _familyMembers.removeAt(index);
-                            });
-                          },
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () async {
+                                final hState = context.read<HabitantsBloc>().state;
+                                final hList = hState is HabitantsLoaded ? hState.habitants : widget.allHabitants;
+                                final selected = await showDialog<List<Habitante>>(
+                                  context: context,
+                                  builder: (dialogCtx) => SearchHabitanteModal(
+                                    allHabitants: hList,
+                                    multiSelect: false,
+                                  ),
+                                );
+                                if (selected != null && selected.isNotEmpty) {
+                                  final h = selected.first;
+                                  setState(() {
+                                    member['widget_key'] = const Uuid().v4();
+                                    member['jefeFamilia'] = '${h.nombres} ${h.apellidos}';
+                                    member['cedula'] = h.cedula;
+                                    member['telefono'] = h.telefono;
+                                    member['habitanteId'] = h.id;
+                                  });
+                                }
+                              },
+                              icon: const Icon(Icons.search, size: 14),
+                              label: const Text('Autocompletar', style: TextStyle(fontSize: 12)),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                setState(() {
+                                  _familyMembers.removeAt(index);
+                                });
+                              },
+                            ),
+                          ],
                         )
                       ],
                     ),

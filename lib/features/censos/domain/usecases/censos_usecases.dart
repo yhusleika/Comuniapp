@@ -64,3 +64,13 @@ class DeleteCensoRecord implements UseCase<void, String> {
     return await repository.deleteCensoRecord(id);
   }
 }
+
+class DeleteCenso implements UseCase<void, String> {
+  final CensosRepository repository;
+  DeleteCenso(this.repository);
+
+  @override
+  Future<Either<Failure, void>> call(String id) async {
+    return await repository.deleteCenso(id);
+  }
+}

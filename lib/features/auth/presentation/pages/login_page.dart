@@ -25,6 +25,26 @@ class _LoginFormState extends State<LoginForm> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _passwordFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _submitLogin() {
+    if (_formKey.currentState!.validate()) {
+      context.read<AuthBloc>().add(
+        AuthLoginRequested(
+          username: _usernameController.text,
+          password: _passwordController.text,
+        ),
+      );
+    }
+  }
 
   void _showForgotPasswordDialog() {
     showDialog(
@@ -88,6 +108,10 @@ class _LoginFormState extends State<LoginForm> {
                               labelText: 'Usuario',
                               hintText: 'Ingrese su usuario',
                             ),
+                            textInputAction: TextInputAction.next,
+                            onFieldSubmitted: (_) {
+                              FocusScope.of(context).requestFocus(_passwordFocusNode);
+                            },
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Por favor ingrese su usuario';
@@ -98,11 +122,14 @@ class _LoginFormState extends State<LoginForm> {
                           const SizedBox(height: 25.0),
                           TextFormField(
                             controller: _passwordController,
+                            focusNode: _passwordFocusNode,
                             decoration: const InputDecoration(
                               labelText: 'Contraseña',
                               hintText: 'Ingrese su contraseña',
                             ),
                             obscureText: true,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _submitLogin(),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Por favor ingrese su contraseña';
@@ -110,45 +137,14 @@ class _LoginFormState extends State<LoginForm> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 30.0),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _showForgotPasswordDialog,
-                              child: Text(
-                                '¿Olvidaste tu contraseña?',
-                                style: TextStyle(
-                                  color: theme.colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20.0),
+                          const SizedBox(height: 25.0),
                           if (state is AuthLoading)
                             const CircularProgressIndicator()
                           else
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: () {
-                                  print('LOGIN DEBUG: Button Pressed');
-                                  if (_formKey.currentState!.validate()) {
-                                    print(
-                                        'LOGIN DEBUG: Form Validated, dispatching event');
-                                    context.read<AuthBloc>().add(
-                                          AuthLoginRequested(
-                                            username:
-                                                _usernameController.text,
-                                            password:
-                                                _passwordController.text,
-                                          ),
-                                        );
-                                  } else {
-                                    print(
-                                        'LOGIN DEBUG: Form Validation Failed');
-                                  }
-                                },
+                                onPressed: _submitLogin,
                                 child: const Text('Iniciar Sesión'),
                               ),
                             ),

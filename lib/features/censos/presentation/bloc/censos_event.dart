@@ -50,3 +50,12 @@ class DeleteCensoRecordEvent extends CensosEvent {
   @override
   List<Object?> get props => [id];
 }
+
+class DeleteCensoEvent extends CensosEvent {
+  final String id;
+  final String nombre;
+  const DeleteCensoEvent({required this.id, required this.nombre});
+
+  @override
+  List<Object?> get props => [id, nombre];
+}

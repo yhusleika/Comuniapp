@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
@@ -102,12 +103,27 @@ class ReportsView extends StatelessWidget {
 
   Widget _buildLeadingImage(List<String> paths) {
     if (paths.isEmpty) return const Icon(Icons.image_not_supported);
-    return Image.file(File(paths.first),
-        width: 50,
-        height: 50,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const Icon(Icons.broken_image));
+    final path = paths.first;
+    return kIsWeb
+        ? Image.network(path,
+            width: 50,
+            height: 50,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.broken_image))
+        : (path.startsWith('http') || path.startsWith('assets/'))
+            ? Image.network(path,
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.broken_image))
+            : Image.file(File(path),
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.broken_image));
   }
 
   Color _getPriorityColor(String priority) {

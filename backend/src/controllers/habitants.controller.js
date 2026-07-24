@@ -23,10 +23,24 @@ const syncHabitante = async (req, res) => {
     }
 };
 
-// Obtener todos los habitantes
+// Obtener todos los habitantes (con búsqueda opcional por nombre, apellido o cédula)
 const getHabitantes = async (req, res) => {
     try {
-        const habitantes = await Habitante.find();
+        const { search } = req.query;
+        let query = {};
+
+        if (search && search.trim().length > 0) {
+            const searchString = search.trim();
+            query = {
+                $or: [
+                    { cedula: { $regex: searchString, $options: 'i' } },
+                    { nombres: { $regex: searchString, $options: 'i' } },
+                    { apellidos: { $regex: searchString, $options: 'i' } }
+                ]
+            };
+        }
+
+        const habitantes = await Habitante.find(query);
         res.status(200).json({ success: true, data: habitantes });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

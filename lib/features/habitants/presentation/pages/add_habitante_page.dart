@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/habitante.dart';
 import '../bloc/habitants_bloc.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../shared/helpers/sectores_helper.dart';
 
 class AddHabitantePage extends StatefulWidget {
   const AddHabitantePage({super.key});
@@ -29,6 +30,26 @@ class _AddHabitantePageState extends State<AddHabitantePage> {
   bool _tieneEnfermedad = false;
   String _condicionVivienda = 'Propia';
   String _tipoVivienda = 'Casa';
+  List<String> _sectoresDisponibles = SectoresHelper.defaultSectores;
+  String _selectedSector = SectoresHelper.defaultSectores.first;
+
+  @override
+  void initState() {
+    super.initState();
+    _sectorCtrl.text = _selectedSector;
+    _loadSectores();
+  }
+
+  Future<void> _loadSectores() async {
+    final list = await SectoresHelper.getAvailableSectores();
+    if (mounted && list.isNotEmpty) {
+      setState(() {
+        _sectoresDisponibles = list;
+        _selectedSector = list.first;
+        _sectorCtrl.text = _selectedSector;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +125,19 @@ class _AddHabitantePageState extends State<AddHabitantePage> {
                 title: const Text('Vivienda'),
                 content: Column(
                   children: [
-                    TextFormField(controller: _sectorCtrl, decoration: const InputDecoration(labelText: 'Sector')),
+                    DropdownButtonFormField<String>(
+                      value: _sectoresDisponibles.contains(_selectedSector) ? _selectedSector : _sectoresDisponibles.first,
+                      items: _sectoresDisponibles.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            _selectedSector = v;
+                            _sectorCtrl.text = v;
+                          });
+                        }
+                      },
+                      decoration: const InputDecoration(labelText: 'Sector'),
+                    ),
                     const SizedBox(height: 8),
                     TextFormField(controller: _puntoRefCtrl, decoration: const InputDecoration(labelText: 'Punto Referencia')),
                     const SizedBox(height: 8),

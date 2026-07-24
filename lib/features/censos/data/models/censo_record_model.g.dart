@@ -26,13 +26,15 @@ class CensoRecordModelAdapter extends TypeAdapter<CensoRecordModel> {
       estatus: fields[6] as String,
       datosDinamicos:
           fields[7] == null ? {} : (fields[7] as Map).cast<String, dynamic>(),
+      isSynced: fields[8] == null ? false : fields[8] as bool,
+      numEncuesta: fields[9] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CensoRecordModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -48,7 +50,11 @@ class CensoRecordModelAdapter extends TypeAdapter<CensoRecordModel> {
       ..writeByte(6)
       ..write(obj.estatus)
       ..writeByte(7)
-      ..write(obj.datosDinamicos);
+      ..write(obj.datosDinamicos)
+      ..writeByte(8)
+      ..write(obj.isSynced)
+      ..writeByte(9)
+      ..write(obj.numEncuesta);
   }
 
   @override

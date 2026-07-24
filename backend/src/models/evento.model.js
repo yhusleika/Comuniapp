@@ -10,7 +10,13 @@ const eventoSchema = new mongoose.Schema({
     progress: { type: Number, default: 0.0 },
     status: { type: String, default: 'Pendiente' },
     attendeeNames: { type: [String], default: [] },
-    photos: { type: [String], default: [] }
+    photos: { type: [String], default: [] },
+    avances: [{
+        descripcion: { type: String, required: true },
+        fecha: { type: Date, default: Date.now },
+        fotos: { type: [String], default: [] },
+        progress: { type: Number, default: 0.0 }
+    }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('Evento', eventoSchema);

@@ -1,4 +1,3 @@
-import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:social_management_pro/features/auth/presentation/bloc/auth_bloc.dart';
@@ -18,6 +17,10 @@ void main() {
   late MockLogout mockLogout;
   late MockCheckAuthStatus mockCheckAuthStatus;
 
+  setUpAll(() {
+    registerFallbackValue(NoParams());
+  });
+
   setUp(() {
     mockLogin = MockLogin();
     mockLogout = MockLogout();
@@ -33,13 +36,16 @@ void main() {
     expect(authBloc.state, AuthInitial());
   });
 
-  blocTest<AuthBloc, AuthState>(
-    'emits [AuthUnauthenticated] when check status returns null',
-    build: () {
-      when(() => mockCheckAuthStatus(NoParams())).thenAnswer((_) async => const Right(null));
-      return authBloc;
-    },
-    act: (bloc) => bloc.add(AuthCheckRequested()),
-    expect: () => [AuthUnauthenticated()],
-  );
+  test('emits [AuthUnauthenticated] when check status returns null', () async {
+    when(() => mockCheckAuthStatus(any())).thenAnswer((_) async => const Right(null));
+
+    expectLater(
+      authBloc.stream,
+      emitsInOrder([
+        AuthUnauthenticated(),
+      ]),
+    );
+
+    authBloc.add(AuthCheckRequested());
+  });
 }

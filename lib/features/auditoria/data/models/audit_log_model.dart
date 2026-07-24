@@ -25,18 +25,24 @@ class AuditLogModel extends AuditLog {
   @override
   final DateTime dateTime;
 
+  @HiveField(5, defaultValue: false)
+  @override
+  final bool isSynced;
+
   AuditLogModel({
     required this.id,
     required this.user,
     required this.role,
     required this.action,
     required this.dateTime,
+    this.isSynced = false,
   }) : super(
           id: id,
           user: user,
           role: role,
           action: action,
           dateTime: dateTime,
+          isSynced: isSynced,
         );
 
   factory AuditLogModel.fromEntity(AuditLog entity) {
@@ -46,6 +52,7 @@ class AuditLogModel extends AuditLog {
       role: entity.role,
       action: entity.action,
       dateTime: entity.dateTime,
+      isSynced: entity.isSynced,
     );
   }
 
@@ -56,6 +63,7 @@ class AuditLogModel extends AuditLog {
       role: role,
       action: action,
       dateTime: dateTime,
+      isSynced: isSynced,
     );
   }
 
@@ -66,16 +74,20 @@ class AuditLogModel extends AuditLog {
       'role': role,
       'action': action,
       'dateTime': dateTime.toIso8601String(),
+      'isSynced': isSynced,
     };
   }
 
   factory AuditLogModel.fromJson(Map<String, dynamic> json) {
     return AuditLogModel(
-      id: json['id'] ?? '',
-      user: json['user'] ?? '',
-      role: json['role'] ?? '',
-      action: json['action'] ?? '',
-      dateTime: DateTime.tryParse(json['dateTime'] ?? '') ?? DateTime.now(),
+      id: (json['id'] != null && json['id'].toString().isNotEmpty)
+          ? json['id'].toString()
+          : (json['_id']?.toString() ?? ''),
+      user: json['user'] ?? json['usuario'] ?? 'Sistema',
+      role: json['role'] ?? json['rol'] ?? 'Administrador',
+      action: json['action'] ?? json['accion'] ?? 'Acción del sistema',
+      dateTime: DateTime.tryParse(json['dateTime'] ?? json['fecha'] ?? '') ?? DateTime.now(),
+      isSynced: true,
     );
   }
 }

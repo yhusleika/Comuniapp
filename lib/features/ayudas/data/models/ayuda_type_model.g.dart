@@ -20,19 +20,22 @@ class AyudaTypeModelAdapter extends TypeAdapter<AyudaTypeModel> {
       id: fields[0] as String,
       nombre: fields[1] as String,
       responsable: fields[2] as String,
+      descripcion: fields[3] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, AyudaTypeModel obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.nombre)
       ..writeByte(2)
-      ..write(obj.responsable);
+      ..write(obj.responsable)
+      ..writeByte(3)
+      ..write(obj.descripcion);
   }
 
   @override

@@ -16,6 +16,7 @@ const habitanteSchema = new mongoose.Schema({
     tipoVivienda: { type: String, required: true },
     registeredBy: { type: String, required: true },
     fechaRegistro: { type: Date, required: true },
+    fechaNacimiento: { type: Date },
     ayudaRecibida: { type: String, default: '' }
 }, {
     timestamps: true

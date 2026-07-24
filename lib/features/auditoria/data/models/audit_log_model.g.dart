@@ -22,13 +22,14 @@ class AuditLogModelAdapter extends TypeAdapter<AuditLogModel> {
       role: fields[2] as String,
       action: fields[3] as String,
       dateTime: fields[4] as DateTime,
+      isSynced: fields[5] == null ? false : fields[5] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, AuditLogModel obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -38,7 +39,9 @@ class AuditLogModelAdapter extends TypeAdapter<AuditLogModel> {
       ..writeByte(3)
       ..write(obj.action)
       ..writeByte(4)
-      ..write(obj.dateTime);
+      ..write(obj.dateTime)
+      ..writeByte(5)
+      ..write(obj.isSynced);
   }
 
   @override

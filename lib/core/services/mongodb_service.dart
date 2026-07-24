@@ -1,8 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:hive/hive.dart';
+import 'hive_config.dart';
+import '../../features/auth/data/models/user_model.dart';
 
 class MongoDBService {
   final Dio _dio;
+  Dio get dio => _dio;
 
   /// Determina la URL base de la API según el entorno.
   /// 
@@ -37,11 +42,31 @@ class MongoDBService {
   )) {
     debugPrint('🌐 API Base URL: ${_dio.options.baseUrl}');
     
-    // Interceptor para logs reales
+    // Interceptor para autenticación mediante JWT y logs
     _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
+      onRequest: (options, handler) async {
         debugPrint('=== API REQUEST ===');
         debugPrint('-> [${options.method}] ${options.baseUrl}${options.path}');
+        
+        try {
+          const storage = FlutterSecureStorage();
+          final token = await storage.read(key: 'jwt_token');
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+            debugPrint('Injected Authorization Bearer Token');
+          }
+          if (Hive.isBoxOpen(HiveConfig.userBox)) {
+            final box = Hive.box(HiveConfig.userBox);
+            final user = box.get('current_user');
+            if (user != null && user is UserModel) {
+              options.headers['x-user-role'] = user.role;
+              options.headers['x-username'] = user.username;
+            }
+          }
+        } catch (e) {
+          debugPrint('Error obteniendo token en Interceptor: $e');
+        }
+
         if (options.data != null) {
           debugPrint('Payload: ${options.data}');
         }
@@ -116,5 +141,21 @@ class MongoDBService {
       debugPrint('MongoDB Remote API Error: $e');
       return {};
     }
+  }
+
+  Future<List<dynamic>> getUsers() async {
+    return getRecords('users');
+  }
+
+  Future<bool> createUser(Map<String, dynamic> userData) async {
+    return createRecord('users', userData);
+  }
+
+  Future<bool> updateUser(String username, Map<String, dynamic> userData) async {
+    return updateRecord('users', username, userData);
+  }
+
+  Future<bool> deleteUser(String username) async {
+    return deleteRecord('users', username);
   }
 }

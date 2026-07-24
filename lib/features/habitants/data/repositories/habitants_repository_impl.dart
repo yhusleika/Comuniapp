@@ -85,6 +85,7 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
         fechaRegistro: model.fechaRegistro,
         detallesDiscapacidad: model.detallesDiscapacidad,
         detallesEnfermedad: model.detallesEnfermedad,
+        fechaNacimiento: model.fechaNacimiento,
         isSynced: apiSynced,
       );
       
@@ -124,6 +125,7 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
         fechaRegistro: model.fechaRegistro,
         detallesDiscapacidad: model.detallesDiscapacidad,
         detallesEnfermedad: model.detallesEnfermedad,
+        fechaNacimiento: model.fechaNacimiento,
         isSynced: apiSynced,
       );
       
@@ -182,6 +184,7 @@ class HabitantsRepositoryImpl implements HabitantsRepository {
           fechaRegistro: habitante.fechaRegistro,
           detallesDiscapacidad: habitante.detallesDiscapacidad,
           detallesEnfermedad: habitante.detallesEnfermedad,
+          fechaNacimiento: habitante.fechaNacimiento,
           isSynced: true,
         );
         await localDataSource.updateHabitante(updated);

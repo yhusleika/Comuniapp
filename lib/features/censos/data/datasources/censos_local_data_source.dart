@@ -6,6 +6,7 @@ import '../models/censo_record_model.dart';
 abstract class CensosLocalDataSource {
   Future<List<CensoModel>> getCensos();
   Future<void> cacheCenso(CensoModel censo);
+  Future<void> deleteCenso(String id);
 
   Future<List<CensoRecordModel>> getCensoRecords(String censoId);
   Future<void> cacheCensoRecord(CensoRecordModel record);
@@ -45,6 +46,12 @@ class CensosLocalDataSourceImpl implements CensosLocalDataSource {
   Future<void> updateCensoRecord(CensoRecordModel record) async {
     final box = await Hive.openBox(HiveConfig.censoRecordsBox);
     await box.put(record.id, record);
+  }
+
+  @override
+  Future<void> deleteCenso(String id) async {
+    final box = await Hive.openBox(HiveConfig.censosBox);
+    await box.delete(id);
   }
 
   @override

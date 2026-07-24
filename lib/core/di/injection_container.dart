@@ -9,6 +9,10 @@ import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/data/datasources/auth_local_data_source.dart';
 
+import '../../features/configuracion/domain/repositories/profile_repository.dart';
+import '../../features/configuracion/data/repositories/profile_repository_impl.dart';
+import '../../features/configuracion/presentation/bloc/profile_bloc.dart';
+
 import '../../features/habitants/domain/repositories/habitants_repository.dart';
 import '../../features/habitants/data/repositories/habitants_repository_impl.dart';
 import '../../features/habitants/data/datasources/habitants_local_data_source.dart';
@@ -52,6 +56,9 @@ import '../../features/auditoria/data/repositories/auditoria_repository_impl.dar
 import '../../features/auditoria/data/datasources/auditoria_local_data_source.dart';
 import '../../features/auditoria/domain/usecases/auditoria_usecases.dart';
 import '../../features/auditoria/presentation/bloc/auditoria_bloc.dart';
+import '../../features/eventos/domain/repositories/eventos_repository.dart';
+import '../../features/eventos/data/repositories/eventos_repository_impl.dart';
+import '../../features/eventos/data/datasources/eventos_local_data_source.dart';
 
 final sl = GetIt.instance;
 
@@ -78,6 +85,17 @@ Future<void> init() async {
   // Data sources
   sl.registerLazySingleton<AuthLocalDataSource>(
       () => AuthLocalDataSourceImpl());
+
+  // ! Features - Configuracion Profile
+  // Bloc
+  sl.registerFactory(() => ProfileBloc(repository: sl()));
+
+  // Repository
+  sl.registerLazySingleton<ProfileRepository>(() => ProfileRepositoryImpl(
+        networkInfo: sl(),
+        mongoDBService: sl(),
+        dio: sl<MongoDBService>().dio,
+      ));
 
   // ! Features - Habitants
   // Bloc
@@ -158,6 +176,7 @@ Future<void> init() async {
   sl.registerFactory(() => CensosBloc(
         getCensos: sl(),
         addCenso: sl(),
+        deleteCensoUseCase: sl(),
         getCensoRecords: sl(),
         addCensoRecord: sl(),
         updateCensoRecord: sl(),
@@ -167,6 +186,7 @@ Future<void> init() async {
   // Use cases
   sl.registerLazySingleton(() => GetCensos(sl()));
   sl.registerLazySingleton(() => AddCenso(sl()));
+  sl.registerLazySingleton(() => DeleteCenso(sl()));
   sl.registerLazySingleton(() => GetCensoRecords(sl()));
   sl.registerLazySingleton(() => AddCensoRecord(sl()));
   sl.registerLazySingleton(() => UpdateCensoRecord(sl()));
@@ -215,11 +235,22 @@ Future<void> init() async {
         addAuditLog: sl(),
       ));
 
+  // ! Features - Eventos
+  sl.registerLazySingleton<EventosRepository>(() => EventosRepositoryImpl(
+        localDataSource: sl(),
+        networkInfo: sl(),
+        mongoDBService: sl(),
+      ));
+  sl.registerLazySingleton<EventosLocalDataSource>(() => EventosLocalDataSourceImpl());
+
   // Sync
   sl.registerLazySingleton(() => SyncManager(
         connectivity: sl(),
         habitantsRepository: sl(),
         reportsRepository: sl(),
+        censosRepository: sl(),
+        auditoriaRepository: sl(),
+        eventosRepository: sl(),
         mongoDBService: sl(),
       ));
 }

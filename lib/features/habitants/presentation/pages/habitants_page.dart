@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:data_table_2/data_table_2.dart';
 import 'package:uuid/uuid.dart';
 import 'package:excel/excel.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/utils/file_saver.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
+import '../../../../shared/helpers/sectores_helper.dart';
 import '../bloc/habitants_bloc.dart';
 import '../providers/habitants_notifier.dart';
 import '../../domain/entities/habitante.dart';
@@ -41,17 +45,26 @@ class _HabitantsViewState extends State<HabitantsView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
-    final isAuditor = authState is AuthAuthenticated && authState.user.role.toLowerCase() == 'auditor';
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final userRole = (user?.role ?? '').toLowerCase().trim();
+    final username = (user?.username ?? '').toLowerCase().trim();
+
+    final isVisor = userRole.contains('visor') ||
+        userRole.contains('auditor') ||
+        username.contains('visor') ||
+        username.contains('auditor') ||
+        userRole.isEmpty;
+    final isOperador = !isVisor && userRole.contains('operador');
+    final isAdmin = !isVisor && (userRole.contains('admin') || userRole.contains('vocero') || username.contains('admin'));
+
+    final canCreate = !isVisor && (isOperador || isAdmin);
+    final canEdit = !isVisor && (isOperador || isAdmin);
+    final canDelete = isAdmin;
 
     return CustomScaffold(
       drawer: SideMenu(scaffoldKey: scaffoldKey),
-      child: BlocListener<HabitantsBloc, HabitantsState>(
+      child: BlocConsumer<HabitantsBloc, HabitantsState>(
         listener: (context, state) {
-          if (state is HabitantsLoaded) {
-            setState(() {
-              _notifier = HabitantsNotifier(state.habitants, isAuditor: isAuditor);
-            });
-          }
           if (state is HabitanteOperationSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -69,33 +82,49 @@ class _HabitantsViewState extends State<HabitantsView> {
             );
           }
         },
-        child: _notifier == null
-            ? const Center(child: CircularProgressIndicator())
-            : ListenableBuilder(
-                listenable: _notifier!,
-                builder: (context, _) {
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(theme, isAuditor),
-                        const SizedBox(height: 20),
-                        _buildFilters(theme),
-                        const SizedBox(height: 20),
-                        _buildDataTable(theme, isAuditor),
-                      ],
-                    ),
-                  );
-                },
-              ),
+        builder: (context, state) {
+          if (state is HabitantsLoading && _notifier == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (state is HabitantsLoaded) {
+            if (_notifier == null) {
+              _notifier = HabitantsNotifier(state.habitants, canEdit: canEdit, canDelete: canDelete);
+            } else {
+              _notifier!.updateHabitants(state.habitants, canEdit: canEdit, canDelete: canDelete);
+            }
+          }
+
+          if (_notifier == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return ListenableBuilder(
+            listenable: _notifier!,
+            builder: (context, _) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(theme, canCreate),
+                    const SizedBox(height: 20),
+                    _buildFilters(theme),
+                    const SizedBox(height: 20),
+                    _buildDataTable(theme, canEdit || canDelete),
+                  ],
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
 
   // ─── Header ───────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(ThemeData theme, bool isAuditor) {
+  Widget _buildHeader(ThemeData theme, bool canCreate) {
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -103,7 +132,7 @@ class _HabitantsViewState extends State<HabitantsView> {
       runSpacing: 16,
       children: [
         Text(
-          'Beneficiarios Activos',
+          'Habitantes',
           style: theme.textTheme.headlineMedium?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -141,7 +170,7 @@ class _HabitantsViewState extends State<HabitantsView> {
                 ),
               ),
             ),
-            if (!isAuditor) ...[
+            if (canCreate) ...[
               const SizedBox(width: 8),
               // Agregar
               Tooltip(
@@ -188,34 +217,38 @@ class _HabitantsViewState extends State<HabitantsView> {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _notifier!.selectedZone,
-                    decoration: const InputDecoration(
-                        labelText: 'Zona', border: OutlineInputBorder()),
-                    items: ['Todas', 'Zona A', 'Zona B', 'Zona C', 'Zona D']
-                        .map((z) => DropdownMenuItem(value: z, child: Text(z)))
-                        .toList(),
-                    onChanged: _notifier!.updateZone,
-                  ),
+                  child: () {
+                    final selZone = _notifier!.selectedZone;
+                    final zoneItems = ['Todas', 'Sector 1', 'Sector 2', 'Sector 3', 'Sector 4', 'Zona A', 'Zona B', 'Zona C'];
+                    final effZoneItems = zoneItems.contains(selZone) ? zoneItems : [selZone, ...zoneItems];
+                    return DropdownButtonFormField<String>(
+                      value: selZone,
+                      decoration: const InputDecoration(
+                          labelText: 'Sector', border: OutlineInputBorder()),
+                      items: effZoneItems
+                          .map((z) => DropdownMenuItem(value: z, child: Text(z)))
+                          .toList(),
+                      onChanged: _notifier!.updateZone,
+                    );
+                  }(),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _notifier!.selectedAid,
-                    decoration: const InputDecoration(
-                        labelText: 'Ayuda Recibida',
-                        border: OutlineInputBorder()),
-                    items: [
-                      'Todas',
-                      'Alimentación',
-                      'Medicinas',
-                      'Vivienda',
-                      'Ninguna'
-                    ]
-                        .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                        .toList(),
-                    onChanged: _notifier!.updateAid,
-                  ),
+                  child: () {
+                    final selAid = _notifier!.selectedAid;
+                    final aidItems = ['Todas', 'Alimentación', 'Medicinas', 'Vivienda', 'Ninguna'];
+                    final effAidItems = aidItems.contains(selAid) ? aidItems : [selAid, ...aidItems];
+                    return DropdownButtonFormField<String>(
+                      value: selAid,
+                      decoration: const InputDecoration(
+                          labelText: 'Ayuda Recibida',
+                          border: OutlineInputBorder()),
+                      items: effAidItems
+                          .map((a) => DropdownMenuItem(value: a, child: Text(a)))
+                          .toList(),
+                      onChanged: _notifier!.updateAid,
+                    );
+                  }(),
                 ),
               ],
             ),
@@ -227,45 +260,114 @@ class _HabitantsViewState extends State<HabitantsView> {
 
   // ─── Tabla ────────────────────────────────────────────────────────────────
 
-  Widget _buildDataTable(ThemeData theme, bool isAuditor) {
-    final ds = _notifier!.dataSource;
-    ds.onEdit = (h) => _showHabitanteModal(habitante: h);
-    ds.onDelete = _confirmDelete;
+  Widget _buildDataTable(ThemeData theme, bool hasActions) {
+    final list = _notifier!.filteredHabitants;
 
-    return Theme(
-      data: theme.copyWith(
-        cardColor: Colors.white,
-        dividerColor: Colors.grey[200],
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: MediaQuery.of(context).size.width > 832
-                ? MediaQuery.of(context).size.width - 32
-                : 800,
-            maxWidth: MediaQuery.of(context).size.width > 832
-                ? MediaQuery.of(context).size.width - 32
-                : 800,
+    if (list.isEmpty) {
+      return Card(
+        color: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: const Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Center(
+            child: Text(
+              'No se encontraron habitantes',
+              style: TextStyle(color: Colors.black54, fontSize: 16),
+            ),
           ),
-          child: PaginatedDataTable(
-            header: const Text('Listado de Habitantes'),
-            rowsPerPage: _notifier!.filteredHabitants.length > 10
-                ? 10
-                : (_notifier!.filteredHabitants.isEmpty
-                    ? 1
-                    : _notifier!.filteredHabitants.length),
-            availableRowsPerPage: const [10, 25, 50, 100],
-            columns: [
-              const DataColumn(label: Text('Nombre')),
-              const DataColumn(label: Text('Apellido')),
-              const DataColumn(label: Text('Cédula')),
-              const DataColumn(label: Text('Zona')),
-              const DataColumn(label: Text('Ayuda')),
-              if (!isAuditor) const DataColumn(label: Text('Acciones')),
-            ],
-            source: ds,
-          ),
+        ),
+      );
+    }
+
+    return Card(
+      color: Colors.white,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                'Listado de Habitantes (${list.length})',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            const Divider(),
+            SizedBox(
+              height: 480,
+              child: Theme(
+                data: theme.copyWith(
+                  cardColor: Colors.white,
+                  dividerColor: Colors.grey.shade200,
+                ),
+                child: DataTable2(
+                  columnSpacing: 12,
+                  horizontalMargin: 12,
+                  minWidth: 850,
+                  columns: [
+                    const DataColumn2(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
+                    const DataColumn2(label: Text('Apellido', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
+                    const DataColumn2(label: Text('Cédula', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.S),
+                    const DataColumn2(label: Text('Edad', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.S),
+                    const DataColumn2(label: Text('Sector', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
+                    const DataColumn2(label: Text('Ayuda', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.L),
+                    if (hasActions)
+                      const DataColumn2(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.S),
+                  ],
+                  rows: list.map((h) {
+                    final birthDate = h.fechaNacimiento;
+                    String ageText = '-';
+                    if (birthDate != null) {
+                      final today = DateTime.now();
+                      int age = today.year - birthDate.year;
+                      if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
+                        age--;
+                      }
+                      ageText = '$age';
+                    }
+
+                    final canEdit = _notifier!.canEdit;
+                    final canDelete = _notifier!.canDelete;
+
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(h.nombres, style: const TextStyle(color: Colors.black87))),
+                        DataCell(Text(h.apellidos, style: const TextStyle(color: Colors.black87))),
+                        DataCell(Text(h.cedula, style: const TextStyle(color: Colors.black87))),
+                        DataCell(Text(ageText, style: const TextStyle(color: Colors.black87))),
+                        DataCell(Text(h.sector, style: const TextStyle(color: Colors.black87))),
+                        DataCell(Text(h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida, style: const TextStyle(color: Colors.black87))),
+                        if (hasActions)
+                          DataCell(Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (canEdit)
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                  onPressed: () => _showHabitanteModal(habitante: h),
+                                ),
+                              if (canDelete)
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                  onPressed: () => _confirmDelete(h.id),
+                                ),
+                            ],
+                          )),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -293,9 +395,10 @@ class _HabitantsViewState extends State<HabitantsView> {
   // ─── Confirmar Eliminar ────────────────────────────────────────────────────
 
   void _confirmDelete(String id) {
+    final bloc = context.read<HabitantsBloc>();
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
@@ -309,12 +412,12 @@ class _HabitantsViewState extends State<HabitantsView> {
               '¿Está seguro de que desea borrar este habitante? Esta acción no se puede deshacer.'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Cancelar')),
             ElevatedButton(
               onPressed: () {
-                context.read<HabitantsBloc>().add(DeleteHabitanteEvent(id));
-                Navigator.pop(context);
+                bloc.add(DeleteHabitanteEvent(id));
+                Navigator.pop(dialogContext);
               },
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red, foregroundColor: Colors.white),
@@ -345,8 +448,9 @@ class _HabitantsViewState extends State<HabitantsView> {
       TextCellValue('Nombres'),
       TextCellValue('Apellidos'),
       TextCellValue('Cédula'),
+      TextCellValue('Edad'),
       TextCellValue('Teléfono'),
-      TextCellValue('Zona/Sector'),
+      TextCellValue('Sector'),
       TextCellValue('Ayuda Recibida'),
       TextCellValue('Cond. Vivienda'),
       TextCellValue('Tipo Vivienda'),
@@ -357,10 +461,22 @@ class _HabitantsViewState extends State<HabitantsView> {
 
     // Datos
     for (var h in list) {
+      final birthDate = h.fechaNacimiento;
+      String ageText = '-';
+      if (birthDate != null) {
+        final today = DateTime.now();
+        int age = today.year - birthDate.year;
+        if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
+          age--;
+        }
+        ageText = '$age';
+      }
+
       sheet.appendRow([
         TextCellValue(h.nombres),
         TextCellValue(h.apellidos),
         TextCellValue(h.cedula),
+        TextCellValue(ageText),
         TextCellValue(h.telefono),
         TextCellValue(h.sector),
         TextCellValue(h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida),
@@ -437,22 +553,36 @@ class _HabitantsViewState extends State<HabitantsView> {
               headers: [
                 'Nombre Completo',
                 'Cédula',
+                'Edad',
                 'Teléfono',
-                'Zona',
+                'Sector',
                 'Ayuda',
                 'Discap.',
                 'Fecha',
               ],
               data: list
-                  .map((h) => [
-                        '${h.nombres} ${h.apellidos}',
-                        h.cedula,
-                        h.telefono.isEmpty ? '-' : h.telefono,
-                        h.sector,
-                        h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida,
-                        h.tieneDiscapacidad ? 'Sí' : 'No',
-                        '${h.fechaRegistro.day}/${h.fechaRegistro.month}/${h.fechaRegistro.year}',
-                      ])
+                  .map((h) {
+                    final birthDate = h.fechaNacimiento;
+                    String ageText = '-';
+                    if (birthDate != null) {
+                      final today = DateTime.now();
+                      int age = today.year - birthDate.year;
+                      if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
+                        age--;
+                      }
+                      ageText = '$age';
+                    }
+                    return [
+                      '${h.nombres} ${h.apellidos}',
+                      h.cedula,
+                      ageText,
+                      h.telefono.isEmpty ? '-' : h.telefono,
+                      h.sector,
+                      h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida,
+                      h.tieneDiscapacidad ? 'Sí' : 'No',
+                      '${h.fechaRegistro.day}/${h.fechaRegistro.month}/${h.fechaRegistro.year}',
+                    ];
+                  })
                   .toList(),
               headerStyle: pw.TextStyle(
                 fontWeight: pw.FontWeight.bold,
@@ -506,17 +636,19 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
   late final TextEditingController _cedulaCtrl;
   late final TextEditingController _telefonoCtrl;
   late final TextEditingController _ptoRefCtrl;
+  late final TextEditingController _birthDateCtrl;
   late final TextEditingController _detallesDiscapacidadCtrl;
   late final TextEditingController _detallesEnfermedadCtrl;
 
-  String _zona = 'Zona A';
+  DateTime? _selectedBirthDate;
+  String _zona = 'Sector 1';
   String _ayuda = 'Ninguna';
   String _condVivienda = 'Propia';
   String _tipoVivienda = 'Casa';
   bool _tieneDiscapacidad = false;
   bool _tieneEnfermedad = false;
 
-  static const _zonas = ['Zona A', 'Zona B', 'Zona C', 'Zona D'];
+  List<String> _dynamicSectores = SectoresHelper.defaultSectores;
   static const _ayudas = ['Ninguna', 'Alimentación', 'Medicinas', 'Vivienda'];
   static const _condiciones = ['Propia', 'Alquilada', 'Prestada', 'Otra'];
   static const _tipos = ['Casa', 'Apartamento', 'Rancho', 'Habitación'];
@@ -532,16 +664,35 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
     _cedulaCtrl = TextEditingController(text: h?.cedula ?? '');
     _telefonoCtrl = TextEditingController(text: h?.telefono ?? '');
     _ptoRefCtrl = TextEditingController(text: h?.puntoReferencia ?? '');
+    _selectedBirthDate = h?.fechaNacimiento;
+    _birthDateCtrl = TextEditingController(
+      text: _selectedBirthDate != null
+          ? DateFormat('yyyy-MM-dd').format(_selectedBirthDate!)
+          : '',
+    );
     _detallesDiscapacidadCtrl =
         TextEditingController(text: h?.detallesDiscapacidad ?? '');
     _detallesEnfermedadCtrl =
         TextEditingController(text: h?.detallesEnfermedad ?? '');
-    _zona = h?.sector ?? 'Zona A';
+    _zona = h?.sector ?? 'Sector 1 - Centro';
     _ayuda = (h?.ayudaRecibida.isEmpty ?? true) ? 'Ninguna' : h!.ayudaRecibida;
     _condVivienda = h?.condicionVivienda ?? 'Propia';
     _tipoVivienda = h?.tipoVivienda ?? 'Casa';
     _tieneDiscapacidad = h?.tieneDiscapacidad ?? false;
     _tieneEnfermedad = h?.tieneEnfermedadCronica ?? false;
+    _loadSectores();
+  }
+
+  Future<void> _loadSectores() async {
+    final list = await SectoresHelper.getAvailableSectores();
+    if (mounted && list.isNotEmpty) {
+      setState(() {
+        _dynamicSectores = list;
+        if (!_dynamicSectores.contains(_zona)) {
+          _dynamicSectores.insert(0, _zona);
+        }
+      });
+    }
   }
 
   @override
@@ -551,6 +702,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
     _cedulaCtrl.dispose();
     _telefonoCtrl.dispose();
     _ptoRefCtrl.dispose();
+    _birthDateCtrl.dispose();
     _detallesDiscapacidadCtrl.dispose();
     _detallesEnfermedadCtrl.dispose();
     super.dispose();
@@ -575,6 +727,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
       tipoVivienda: _tipoVivienda,
       registeredBy: widget.habitante?.registeredBy ?? 'admin',
       fechaRegistro: widget.habitante?.fechaRegistro ?? DateTime.now(),
+      fechaNacimiento: _selectedBirthDate,
     );
     widget.onSave(newH);
     Navigator.pop(context);
@@ -662,8 +815,43 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                         children: [
                           Expanded(child: _field(_cedulaCtrl, 'Cédula', Icons.badge, required: true, keyboardType: TextInputType.number)),
                           const SizedBox(width: 12),
-                          Expanded(child: _field(_telefonoCtrl, 'Teléfono', Icons.phone, keyboardType: TextInputType.phone)),
+                          Expanded(
+                            child: _field(
+                              _telefonoCtrl,
+                              'Teléfono',
+                              Icons.phone,
+                              keyboardType: TextInputType.phone,
+                              maxLength: 11,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              validator: (v) {
+                                if (v != null && v.isNotEmpty && v.length != 11) {
+                                  return 'Debe tener exactamente 11 dígitos';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _selectedBirthDate ?? DateTime(2000),
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _selectedBirthDate = picked;
+                              _birthDateCtrl.text = DateFormat('yyyy-MM-dd').format(picked);
+                            });
+                          }
+                        },
+                        child: AbsorbPointer(
+                          child: _field(_birthDateCtrl, 'Fecha de Nacimiento', Icons.cake, required: true),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _field(_ptoRefCtrl, 'Punto de Referencia', Icons.location_on),
@@ -673,9 +861,84 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: _dropdown('Zona/Sector', _zonas, _zona, (v) => setState(() => _zona = v!))),
+                          Expanded(child: _dropdown('Sector', _dynamicSectores, _zona, (v) => setState(() => _zona = v!))),
                           const SizedBox(width: 12),
-                          Expanded(child: _dropdown('Ayuda Recibida', _ayudas, _ayuda, (v) => setState(() => _ayuda = v!))),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final List<String> currentSelected = _ayuda == 'Ninguna' || _ayuda.trim().isEmpty
+                                    ? []
+                                    : _ayuda.split(',').map((e) => e.trim()).toList();
+                                
+                                final result = await showDialog<List<String>>(
+                                  context: context,
+                                  builder: (dialogCtx) {
+                                    List<String> tempSelected = List<String>.from(currentSelected);
+                                    return StatefulBuilder(
+                                      builder: (statefulCtx, setDialogState) {
+                                        return AlertDialog(
+                                          backgroundColor: Colors.white,
+                                          title: const Text('Seleccionar Ayudas', style: TextStyle(color: Colors.black87)),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: _ayudas.where((a) => a != 'Ninguna').map((a) {
+                                              final isSelected = tempSelected.contains(a);
+                                              return CheckboxListTile(
+                                                activeColor: const Color(0xFF416FDF),
+                                                title: Text(a, style: const TextStyle(color: Colors.black87)),
+                                                value: isSelected,
+                                                onChanged: (val) {
+                                                  setDialogState(() {
+                                                    if (val == true) {
+                                                      tempSelected.add(a);
+                                                    } else {
+                                                      tempSelected.remove(a);
+                                                    }
+                                                  });
+                                                },
+                                              );
+                                            }).toList(),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(statefulCtx),
+                                              child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
+                                            ),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF416FDF),
+                                                foregroundColor: Colors.white,
+                                              ),
+                                              onPressed: () => Navigator.pop(statefulCtx, tempSelected),
+                                              child: const Text('Aceptar'),
+                                            ),
+                                          ],
+                                        );
+                                      }
+                                    );
+                                  }
+                                );
+                                if (result != null) {
+                                  setState(() {
+                                    _ayuda = result.isEmpty ? 'Ninguna' : result.join(', ');
+                                  });
+                                }
+                              },
+                              child: InputDecorator(
+                                decoration: const InputDecoration(
+                                  labelText: 'Ayudas Recibidas',
+                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                                child: Text(
+                                  _ayuda,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.black87),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -775,10 +1038,15 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
     IconData icon, {
     bool required = false,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
       style: const TextStyle(color: Colors.black87),
       decoration: InputDecoration(
         labelText: label,
@@ -786,11 +1054,12 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        counterText: '',
       ),
-      validator: required
+      validator: validator ?? (required
           ? (v) =>
               (v == null || v.trim().isEmpty) ? 'Este campo es requerido' : null
-          : null,
+          : null),
     );
   }
 
@@ -800,6 +1069,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
     String value,
     void Function(String?) onChanged,
   ) {
+    final List<String> effectiveItems = items.contains(value) ? items : [value, ...items];
     return DropdownButtonFormField<String>(
       value: value,
       decoration: InputDecoration(
@@ -808,7 +1078,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       ),
-      items: items
+      items: effectiveItems
           .map((i) => DropdownMenuItem(value: i, child: Text(i)))
           .toList(),
       onChanged: onChanged,
