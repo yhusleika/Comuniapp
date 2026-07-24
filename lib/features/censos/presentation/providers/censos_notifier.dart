@@ -15,6 +15,7 @@ class CensosNotifier extends ChangeNotifier {
       'Todos'; // Todos, Censados, Pendientes, Casos Especiales
 
   List<Censo> get censos => _allCensos;
+  List<CensoRecord> get records => _allRecords;
   List<CensoRecord> get filteredRecords => _filteredRecords;
   Censo? get selectedCenso => _selectedCenso;
   String get searchQuery => _searchQuery;
@@ -22,7 +23,9 @@ class CensosNotifier extends ChangeNotifier {
 
   void updateCensos(List<Censo> censos) {
     _allCensos = censos;
-    if (_selectedCenso == null && censos.isNotEmpty) {
+    if (censos.isEmpty) {
+      _selectedCenso = null;
+    } else if (_selectedCenso == null || !censos.any((c) => c.id == _selectedCenso!.id)) {
       _selectedCenso = censos.first;
     }
     notifyListeners();
@@ -68,14 +71,16 @@ class FamilyRecordsDataTableSource extends DataTableSource {
   final Function(CensoRecord) onEdit;
   final Function(CensoRecord) onDelete;
   final BuildContext context;
-  final bool isAuditor;
+  final bool canEdit;
+  final bool canDelete;
 
   FamilyRecordsDataTableSource({
     required this.records,
     required this.onEdit,
     required this.onDelete,
     required this.context,
-    this.isAuditor = false,
+    this.canEdit = true,
+    this.canDelete = true,
   });
 
   @override
@@ -84,21 +89,24 @@ class FamilyRecordsDataTableSource extends DataTableSource {
     final record = records[index];
 
     return DataRow(cells: [
+      DataCell(Text(record.numEncuesta?.toString() ?? (index + 1).toString())),
       DataCell(Text(record.jefeFamilia)),
       DataCell(Text(record.cedula)),
       DataCell(Text(record.direccion)),
-      if (!isAuditor)
+      if (canEdit || canDelete)
         DataCell(Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue),
-              onPressed: () => onEdit(record),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => onDelete(record),
-            ),
+            if (canEdit)
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.blue),
+                onPressed: () => onEdit(record),
+              ),
+            if (canDelete)
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () => onDelete(record),
+              ),
           ],
         )),
     ]);

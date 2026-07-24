@@ -1,19 +1,26 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:data_table_2/data_table_2.dart';
+import 'package:hive/hive.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
+import '../../../../core/services/mongodb_service.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/utils/user_roles_helper.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 class SystemUser {
   final String id;
+  final String username;
   final String name;
   final String email;
-  final String role; // 'Admin', 'Operador', 'Visor'
+  final String role; // 'Administrador', 'Operador', 'Visor'
   final String status; // 'Activo', 'Bloqueado'
   final String password;
 
   SystemUser({
     required this.id,
+    required this.username,
     required this.name,
     required this.email,
     required this.role,
@@ -23,6 +30,7 @@ class SystemUser {
 
   SystemUser copyWith({
     String? id,
+    String? username,
     String? name,
     String? email,
     String? role,
@@ -31,6 +39,7 @@ class SystemUser {
   }) {
     return SystemUser(
       id: id ?? this.id,
+      username: username ?? this.username,
       name: name ?? this.name,
       email: email ?? this.email,
       role: role ?? this.role,
@@ -38,6 +47,20 @@ class SystemUser {
       password: password ?? this.password,
     );
   }
+}
+
+class SectorItem {
+  final String id;
+  final String nombre;
+  final String descripcion;
+  final int totalHabitantes;
+
+  SectorItem({
+    required this.id,
+    required this.nombre,
+    required this.descripcion,
+    required this.totalHabitantes,
+  });
 }
 
 class SystemRole {
@@ -62,59 +85,206 @@ class AdministracionGeneralPage extends StatefulWidget {
 class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final List<SystemUser> _users = [];
+  final List<SectorItem> _sectores = [];
+  bool _isLoadingUsers = true;
 
-  final List<SystemRole> _systemRoles = [
-    const SystemRole(
-      name: 'Admin',
-      description: 'Acceso total y control de seguridad de toda la plataforma.',
-      permissions: ['Crear Usuarios', 'Gestionar Censos', 'Configuración de Sistema', 'Auditoría Completa'],
+  static const List<SystemRole> _staticRoles = [
+    SystemRole(
+      name: 'Administrador',
+      description: 'Acceso total y control absoluto de la plataforma y administración.',
+      permissions: [
+        'Crear, Editar y Eliminar en todos los módulos',
+        'Gestión de Usuarios y Sectores',
+        'Configuración de Sistema',
+        'Auditoría y Logs Completos',
+        'Descarga de Reportes'
+      ],
     ),
-    const SystemRole(
+    SystemRole(
       name: 'Operador',
-      description: 'Gestión diaria de habitantes, censos, jornadas y ayudas.',
-      permissions: ['Crear Censos', 'Crear Habitantes', 'Registrar Ayudas', 'Registrar Eventos'],
+      description: 'Permisos operativos para registro y edición de datos comunitarios.',
+      permissions: [
+        'Crear y Editar Censos',
+        'Crear y Editar Habitantes',
+        'Crear y Editar Ayudas',
+        'Crear y Editar Actividades',
+        'Descarga de Reportes'
+      ],
     ),
-    const SystemRole(
+    SystemRole(
       name: 'Visor',
-      description: 'Acceso de solo lectura para reportes y visualización.',
-      permissions: ['Ver Dashboard', 'Ver Estadísticas', 'Generar Reportes PDF'],
+      description: 'Acceso exclusivo de solo lectura y generación de reportes.',
+      permissions: [
+        'Visualización de Inicio y Módulos',
+        'Visualización de Estadísticas',
+        'Descarga de Reportes PDF y Excel'
+      ],
     ),
   ];
 
-  List<String> get _roles => _systemRoles.map((r) => r.name).toList();
   String _searchQuery = '';
   final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Pre-populate with some beautiful mock users
-    _users.addAll([
-      SystemUser(
-        id: '1',
-        name: 'Alejandro Colmenarez',
-        email: 'a.colmenarez@comuniapp.org',
-        role: 'Admin',
-        status: 'Activo',
-        password: 'Password123',
-      ),
-      SystemUser(
-        id: '2',
-        name: 'Gabriela Mendoza',
-        email: 'g.mendoza@comuniapp.org',
-        role: 'Operador',
-        status: 'Activo',
-        password: 'Password456',
-      ),
-      SystemUser(
-        id: '3',
-        name: 'Ricardo Espinoza',
-        email: 'r.espinoza@comuniapp.org',
-        role: 'Visor',
-        status: 'Bloqueado',
-        password: 'Password789',
-      ),
-    ]);
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoadingUsers = true);
+
+    final mongoService = sl<MongoDBService>();
+    final sectoresBox = await Hive.openBox('sectores_box');
+    final usersBox = await Hive.openBox('system_users_box');
+
+    // 1. Cargar Sectores (API remote + fallback Hive local)
+    _sectores.clear();
+    final Map<String, SectorItem> sectorMap = {};
+
+    if (sectoresBox.isNotEmpty) {
+      for (var val in sectoresBox.values) {
+        if (val is Map) {
+          final m = Map<String, dynamic>.from(val);
+          final nombre = (m['nombre'] ?? '').toString().trim();
+          final id = (m['id'] ?? '').toString();
+          if (nombre.isNotEmpty) {
+            sectorMap[nombre.toLowerCase()] = SectorItem(
+              id: id.isNotEmpty ? id : 'sec_${nombre.hashCode}',
+              nombre: nombre,
+              descripcion: m['descripcion'] ?? '',
+              totalHabitantes: m['totalHabitantes'] ?? 0,
+            );
+          }
+        }
+      }
+    }
+
+    try {
+      final remoteSectores = await mongoService.getRecords('sectores');
+      if (remoteSectores.isNotEmpty) {
+        for (var s in remoteSectores) {
+          final nombre = (s['nombre'] ?? '').toString().trim();
+          final id = (s['id'] ?? s['_id'] ?? '').toString();
+          if (nombre.isNotEmpty) {
+            final secItem = SectorItem(
+              id: id.isNotEmpty ? id : 'sec_${nombre.hashCode}',
+              nombre: nombre,
+              descripcion: s['descripcion'] ?? '',
+              totalHabitantes: s['totalHabitantes'] ?? 0,
+            );
+            sectorMap[nombre.toLowerCase()] = secItem;
+            await sectoresBox.put(secItem.id, {
+              'id': secItem.id,
+              'nombre': secItem.nombre,
+              'descripcion': secItem.descripcion,
+              'totalHabitantes': secItem.totalHabitantes,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error obteniendo sectores remotos: $e');
+    }
+
+    // Si aún no hay sectores (ni remotos ni locales), inicializar sectores por defecto
+    if (sectorMap.isEmpty) {
+      final defaultSectores = [
+        SectorItem(id: 'sec_1', nombre: 'Sector 1 - Centro', descripcion: 'Zona central del municipio', totalHabitantes: 45),
+        SectorItem(id: 'sec_2', nombre: 'Sector 2 - Norte', descripcion: 'Comunidad del sector norte', totalHabitantes: 32),
+        SectorItem(id: 'sec_3', nombre: 'Sector 3 - Sur', descripcion: 'Comunidad del sector sur', totalHabitantes: 28),
+        SectorItem(id: 'sec_4', nombre: 'Sector 4 - Este', descripcion: 'Comunidad del sector este', totalHabitantes: 19),
+      ];
+      for (var s in defaultSectores) {
+        sectorMap[s.nombre.toLowerCase()] = s;
+        await sectoresBox.put(s.id, {
+          'id': s.id,
+          'nombre': s.nombre,
+          'descripcion': s.descripcion,
+          'totalHabitantes': s.totalHabitantes,
+        });
+      }
+    }
+
+    _sectores.addAll(sectorMap.values);
+
+    // 2. Cargar Usuarios (API remote + local Hive + recovered_credentials)
+    _users.clear();
+    final Map<String, SystemUser> userMap = {};
+
+    try {
+      final usersRes = await mongoService.getUsers();
+      if (usersRes.isNotEmpty) {
+        UserRolesHelper.updateOperadoresFromList(usersRes);
+        for (var u in usersRes) {
+          final roleRaw = (u['role'] ?? 'operador').toString().toLowerCase();
+          String roleDisplay = 'Operador';
+          if (roleRaw.contains('admin')) roleDisplay = 'Administrador';
+          if (roleRaw.contains('visor')) roleDisplay = 'Visor';
+
+          final username = (u['username'] ?? '').toString().toLowerCase();
+          if (username.isNotEmpty) {
+            userMap[username] = SystemUser(
+              id: u['_id'] ?? u['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+              username: username,
+              name: '${u['nombres'] ?? ''} ${u['apellidos'] ?? ''}'.trim().isEmpty
+                  ? username
+                  : '${u['nombres'] ?? ''} ${u['apellidos'] ?? ''}'.trim(),
+              email: u['email'] ?? '$username@comuniapp.org',
+              role: roleDisplay,
+              status: u['status'] == 'Bloqueado' ? 'Bloqueado' : 'Activo',
+              password: '••••••••',
+            );
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Cargar también usuarios locales de Hive system_users_box
+    if (usersBox.isNotEmpty) {
+      for (var val in usersBox.values) {
+        if (val is Map) {
+          final u = Map<String, dynamic>.from(val);
+          final username = (u['username'] ?? '').toString().toLowerCase();
+          if (username.isNotEmpty && !userMap.containsKey(username)) {
+            userMap[username] = SystemUser(
+              id: (u['id'] ?? '').toString(),
+              username: username,
+              name: u['name'] ?? username,
+              email: u['email'] ?? '$username@comuniapp.org',
+              role: u['role'] ?? 'Operador',
+              status: u['status'] ?? 'Activo',
+              password: '••••••••',
+            );
+          }
+        }
+      }
+    }
+
+    // Si está completamente vacío, usar default admins
+    if (userMap.isEmpty) {
+      final defaultUsers = [
+        SystemUser(id: 'usr_1', username: 'admin', name: 'Administrador Principal', email: 'admin@comuniapp.org', role: 'Administrador', status: 'Activo', password: '••••••••'),
+        SystemUser(id: 'usr_2', username: 'operador1', name: 'Juan Pérez (Operador)', email: 'juan.perez@comuniapp.org', role: 'Operador', status: 'Activo', password: '••••••••'),
+        SystemUser(id: 'usr_3', username: 'visor1', name: 'María López (Visor)', email: 'maria.lopez@comuniapp.org', role: 'Visor', status: 'Activo', password: '••••••••'),
+      ];
+      for (var u in defaultUsers) {
+        userMap[u.username] = u;
+      }
+    }
+
+    _users.addAll(userMap.values);
+    UserRolesHelper.updateOperadoresFromList(
+      _users.map((u) => {
+        'username': u.username,
+        'nombres': u.name,
+        'role': u.role,
+      }).toList()
+    );
+
+    if (mounted) {
+      setState(() => _isLoadingUsers = false);
+    }
   }
 
   @override
@@ -127,6 +297,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
     if (_searchQuery.isEmpty) return _users;
     return _users.where((u) {
       return u.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          u.username.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           u.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           u.role.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
@@ -140,6 +311,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
 
   void _showCreateUserDialog() {
     final nameController = TextEditingController();
+    final usernameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController(text: _generateProvisionalPassword());
     String selectedRole = 'Operador';
@@ -170,7 +342,6 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Header
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
@@ -199,7 +370,6 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                     ],
                   ),
                 ),
-                // Form content
                 Flexible(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
@@ -208,6 +378,26 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          const Text(
+                            'Nombre de Usuario *',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: usernameController,
+                            style: const TextStyle(color: Colors.black87),
+                            decoration: InputDecoration(
+                              hintText: 'Ej. jperez',
+                              hintStyle: const TextStyle(color: Colors.black38),
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            ),
+                            validator: (v) => v == null || v.trim().isEmpty ? 'El usuario es obligatorio' : null,
+                          ),
+                          const SizedBox(height: 16),
+
                           const Text(
                             'Nombre Completo *',
                             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
@@ -224,10 +414,10 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'El nombre es obligatorio' : null,
+                            validator: (v) => v == null || v.trim().isEmpty ? 'El nombre es obligatorio' : null,
                           ),
                           const SizedBox(height: 16),
-  
+
                           const Text(
                             'Correo Electrónico *',
                             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
@@ -251,7 +441,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                             },
                           ),
                           const SizedBox(height: 16),
-  
+
                           const Text(
                             'Rol Asignado *',
                             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
@@ -267,41 +457,52 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                             ),
-                            items: _roles
-                                .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                            items: _staticRoles
+                                .map((r) => DropdownMenuItem(value: r.name, child: Text(r.name)))
                                 .toList(),
                             onChanged: (val) => setState(() => selectedRole = val!),
                           ),
                           const SizedBox(height: 16),
-  
+
                           const Text(
-                            'Contraseña Provisional',
+                            'Contraseña *',
                             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Escriba una contraseña o genere una automáticamente',
+                            style: TextStyle(color: Colors.black45, fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: passwordController,
-                            readOnly: true,
-                            style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
                             decoration: InputDecoration(
+                              hintText: 'Mínimo 6 caracteres',
+                              hintStyle: const TextStyle(color: Colors.black38),
                               suffixIcon: IconButton(
                                 icon: const Icon(Icons.refresh, color: Color(0xFF416FDF)),
+                                tooltip: 'Generar contraseña aleatoria',
                                 onPressed: () {
                                   passwordController.text = _generateProvisionalPassword();
                                 },
                               ),
                               filled: true,
-                              fillColor: Colors.grey.shade100,
+                              fillColor: Colors.grey.shade50,
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                             ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'La contraseña es obligatoria';
+                              if (v.trim().length < 6) return 'Mínimo 6 caracteres';
+                              return null;
+                            },
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                // Footer
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -328,28 +529,62 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           elevation: 2,
                         ),
-                        onPressed: () {
+                        onPressed: () async {
                           if (formKey.currentState!.validate()) {
+                            final newUser = SystemUser(
+                              id: DateTime.now().millisecondsSinceEpoch.toString(),
+                              username: usernameController.text.trim().toLowerCase(),
+                              name: nameController.text.trim(),
+                              email: emailController.text.trim(),
+                              role: selectedRole,
+                              status: 'Activo',
+                              password: passwordController.text.trim(),
+                            );
+
+                            try {
+                              final mongo = sl<MongoDBService>();
+                              await mongo.createUser({
+                                'username': newUser.username,
+                                'password': newUser.password,
+                                'role': newUser.role.toLowerCase(),
+                                'nombres': newUser.name,
+                                'email': newUser.email,
+                              });
+                              final recoveredBox = await Hive.openBox('recovered_credentials');
+                              await recoveredBox.put(newUser.username, newUser.password);
+                              final usersBox = await Hive.openBox('system_users_box');
+                              await usersBox.put(newUser.username, {
+                                'id': newUser.id,
+                                'username': newUser.username,
+                                'name': newUser.name,
+                                'email': newUser.email,
+                                'role': newUser.role,
+                                'status': newUser.status,
+                              });
+                            } catch (_) {}
+
                             setState(() {
-                              _users.insert(
-                                0,
-                                SystemUser(
-                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                  name: nameController.text.trim(),
-                                  email: emailController.text.trim(),
-                                  role: selectedRole,
-                                  status: 'Activo',
-                                  password: passwordController.text.trim(),
-                                ),
+                              _users.insert(0, newUser);
+                              UserRolesHelper.updateOperadoresFromList(
+                                _users.map((u) => {
+                                  'username': u.username,
+                                  'nombres': u.name,
+                                  'role': u.role,
+                                }).toList()
                               );
                             });
-                            Navigator.pop(dialogContext);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Usuario "${nameController.text}" creado con éxito.'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
+
+                            sl<AuditLoggerService>().log('Creó al usuario "${newUser.name}" (${newUser.role})');
+
+                            if (mounted) {
+                              Navigator.pop(dialogContext);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Usuario "${newUser.name}" creado con éxito.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
                           }
                         },
                         child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -365,8 +600,10 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
     );
   }
 
-  void _showChangePasswordDialog(SystemUser user) {
-    final passController = TextEditingController();
+  void _showEditUserDialog(SystemUser user) {
+    final nameController = TextEditingController(text: user.name);
+    final emailController = TextEditingController(text: user.email);
+    String selectedRole = user.role;
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -387,7 +624,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
           elevation: 8,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: 400,
+              maxWidth: 450,
               maxHeight: isMobile ? size.height * 0.9 : size.height * 0.85,
             ),
             child: Column(
@@ -396,20 +633,19 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF416FDF),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF416FDF),
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: isMobile ? Radius.zero : Radius.zero,
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
                     ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Cambiar Contraseña',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      Text(
+                        'Editar Usuario (${user.username})',
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       IconButton(
                         onPressed: () => Navigator.pop(dialogContext),
@@ -426,22 +662,47 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Nueva contraseña para ${user.name}:',
-                            style: const TextStyle(color: Colors.black87),
-                          ),
-                          const SizedBox(height: 12),
+                          const Text('Nombre Completo *', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                          const SizedBox(height: 8),
                           TextFormField(
-                            controller: passController,
+                            controller: nameController,
                             style: const TextStyle(color: Colors.black87),
-                            obscureText: true,
                             decoration: InputDecoration(
-                              hintText: 'Ingrese nueva contraseña',
                               filled: true,
                               fillColor: Colors.grey.shade50,
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            validator: (v) => v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
+                            validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text('Correo Electrónico *', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: emailController,
+                            style: const TextStyle(color: Colors.black87),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            validator: (v) => v == null || !v.contains('@') ? 'Correo inválido' : null,
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text('Rol *', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            dropdownColor: Colors.white,
+                            value: selectedRole,
+                            style: const TextStyle(color: Colors.black87),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: _staticRoles.map((r) => DropdownMenuItem(value: r.name, child: Text(r.name))).toList(),
+                            onChanged: (val) => setState(() => selectedRole = val!),
                           ),
                         ],
                       ),
@@ -468,24 +729,37 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                       const SizedBox(width: 12),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF416FDF)),
-                        onPressed: () {
+                        onPressed: () async {
                           if (formKey.currentState!.validate()) {
+                            final updatedUser = user.copyWith(
+                              name: nameController.text.trim(),
+                              email: emailController.text.trim(),
+                              role: selectedRole,
+                            );
+
+                            try {
+                              final mongo = sl<MongoDBService>();
+                              await mongo.updateUser(user.username, {
+                                'nombres': updatedUser.name,
+                                'email': updatedUser.email,
+                                'role': updatedUser.role.toLowerCase(),
+                              });
+                            } catch (_) {}
+
                             setState(() {
                               final idx = _users.indexWhere((u) => u.id == user.id);
-                              if (idx != -1) {
-                                _users[idx] = user.copyWith(password: passController.text.trim());
-                              }
+                              if (idx != -1) _users[idx] = updatedUser;
                             });
-                            Navigator.pop(dialogContext);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Contraseña cambiada exitosamente.'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
+
+                            if (mounted) {
+                              Navigator.pop(dialogContext);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Usuario actualizado exitosamente.'), backgroundColor: Colors.green),
+                              );
+                            }
                           }
                         },
-                        child: const Text('Actualizar', style: TextStyle(color: Colors.white)),
+                        child: const Text('Guardar', style: TextStyle(color: Colors.white)),
                       ),
                     ],
                   ),
@@ -498,17 +772,168 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
     );
   }
 
-  void _toggleUserBlock(SystemUser user, bool block) {
-    setState(() {
-      final idx = _users.indexWhere((u) => u.id == user.id);
-      if (idx != -1) {
-        _users[idx] = user.copyWith(status: block ? 'Bloqueado' : 'Activo');
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(block ? 'Usuario "${user.name}" bloqueado correctamente.' : 'Usuario "${user.name}" desbloqueado correctamente.'),
-        backgroundColor: block ? Colors.redAccent : Colors.green,
+  void _confirmDeleteUser(SystemUser user) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Eliminar Usuario'),
+          ],
+        ),
+        content: Text('¿Está seguro de eliminar al usuario "${user.name}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              try {
+                final mongo = sl<MongoDBService>();
+                await mongo.deleteUser(user.username);
+              } catch (_) {}
+
+              setState(() {
+                _users.removeWhere((u) => u.id == user.id);
+              });
+
+              sl<AuditLoggerService>().log('Eliminó al usuario "${user.name}"');
+              if (mounted) {
+                Navigator.pop(dialogCtx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Usuario "${user.name}" eliminado.'), backgroundColor: Colors.redAccent),
+                );
+              }
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSectorModal({SectorItem? sector}) {
+    final nombreCtrl = TextEditingController(text: sector?.nombre ?? '');
+    final descCtrl = TextEditingController(text: sector?.descripcion ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 450),
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sector != null ? 'Editar Sector' : 'Nuevo Sector',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF416FDF)),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: nombreCtrl,
+                  decoration: const InputDecoration(labelText: 'Nombre del Sector *', border: OutlineInputBorder()),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo requerido' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: descCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Descripción del Sector', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF416FDF), foregroundColor: Colors.white),
+                      onPressed: () async {
+                        if (formKey.currentState!.validate()) {
+                          final mongo = sl<MongoDBService>();
+                          final sectoresBox = await Hive.openBox('sectores_box');
+
+                          if (sector != null) {
+                            final updatedSector = SectorItem(
+                              id: sector.id,
+                              nombre: nombreCtrl.text.trim(),
+                              descripcion: descCtrl.text.trim(),
+                              totalHabitantes: sector.totalHabitantes,
+                            );
+
+                            try {
+                              await mongo.updateRecord('sectores', sector.id, {
+                                'id': updatedSector.id,
+                                'nombre': updatedSector.nombre,
+                                'descripcion': updatedSector.descripcion,
+                                'totalHabitantes': updatedSector.totalHabitantes,
+                              });
+                            } catch (_) {}
+
+                            await sectoresBox.put(sector.id, {
+                              'id': updatedSector.id,
+                              'nombre': updatedSector.nombre,
+                              'descripcion': updatedSector.descripcion,
+                              'totalHabitantes': updatedSector.totalHabitantes,
+                            });
+
+                            setState(() {
+                              final idx = _sectores.indexWhere((s) => s.id == sector.id);
+                              if (idx != -1) _sectores[idx] = updatedSector;
+                            });
+                          } else {
+                            final newId = 'sec_${DateTime.now().millisecondsSinceEpoch}';
+                            final newSector = SectorItem(
+                              id: newId,
+                              nombre: nombreCtrl.text.trim(),
+                              descripcion: descCtrl.text.trim(),
+                              totalHabitantes: 0,
+                            );
+
+                            try {
+                              await mongo.createRecord('sectores', {
+                                'id': newSector.id,
+                                'nombre': newSector.nombre,
+                                'descripcion': newSector.descripcion,
+                                'totalHabitantes': 0,
+                              });
+                            } catch (_) {}
+
+                            await sectoresBox.put(newId, {
+                              'id': newSector.id,
+                              'nombre': newSector.nombre,
+                              'descripcion': newSector.descripcion,
+                              'totalHabitantes': 0,
+                            });
+
+                            setState(() {
+                              _sectores.removeWhere((s) => s.id == newSector.id || s.nombre.toLowerCase() == newSector.nombre.toLowerCase());
+                              _sectores.add(newSector);
+                            });
+                            sl<AuditLoggerService>().log('Guardó el sector "${newSector.nombre}"');
+                          }
+
+                          if (mounted) {
+                            Navigator.pop(dialogCtx);
+                          }
+                        }
+                      },
+                      child: const Text('Guardar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -520,11 +945,10 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
     return CustomScaffold(
       drawer: SideMenu(scaffoldKey: scaffoldKey),
       child: DefaultTabController(
-        length: 2,
+        length: 3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Responsive Header (Clean design)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
               child: Column(
@@ -539,7 +963,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Gestión de usuarios y control de roles del sistema',
+                    'Gestión de usuarios, perfiles de acceso y administración de sectores comunitarios',
                     style: TextStyle(
                         color: Colors.white70,
                         fontSize: 15,
@@ -550,7 +974,6 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
             ),
             const SizedBox(height: 10),
             
-            // Tab Navigation inside a themed container, identical to ProfilePage
             Expanded(
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -587,6 +1010,11 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                           icon: Icon(Icons.admin_panel_settings_outlined, size: 18),
                           text: 'Roles y Permisos',
                         ),
+                        Tab(
+                          iconMargin: EdgeInsets.only(bottom: 2),
+                          icon: Icon(Icons.map_outlined, size: 18),
+                          text: 'Gestión de Sectores',
+                        ),
                       ],
                     ),
                     Expanded(
@@ -594,6 +1022,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                         children: [
                           _buildUsersTab(theme),
                           _buildRolesTab(theme),
+                          _buildSectoresTab(theme),
                         ],
                       ),
                     ),
@@ -608,11 +1037,14 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
   }
 
   Widget _buildUsersTab(ThemeData theme) {
+    if (_isLoadingUsers) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          // Search and Action Bar Card
           Card(
             color: Colors.white,
             surfaceTintColor: Colors.transparent,
@@ -631,7 +1063,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                       onChanged: (val) => setState(() => _searchQuery = val),
                       style: const TextStyle(color: Colors.black87),
                       decoration: InputDecoration(
-                        hintText: 'Buscar por nombre, correo o rol...',
+                        hintText: 'Buscar por usuario, nombre, correo o rol...',
                         hintStyle: const TextStyle(color: Colors.black38),
                         prefixIcon: Icon(Icons.search, color: theme.colorScheme.primary),
                         filled: true,
@@ -662,10 +1094,8 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
               ),
             ),
           ),
-
           const SizedBox(height: 20),
 
-          // Table card
           Card(
             color: Colors.white,
             surfaceTintColor: Colors.transparent,
@@ -691,7 +1121,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                     ),
                   ),
                   SizedBox(
-                    height: 400,
+                    height: 420,
                     child: Theme(
                       data: theme.copyWith(
                         cardColor: Colors.white,
@@ -705,29 +1135,24 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                         horizontalMargin: 12,
                         minWidth: 700,
                         columns: const [
-                          DataColumn2(
-                              label: Text('Usuario/Nombre', style: TextStyle(fontWeight: FontWeight.bold)),
-                              size: ColumnSize.L),
-                          DataColumn2(
-                              label: Text('Correo Electrónico', style: TextStyle(fontWeight: FontWeight.bold)),
-                              size: ColumnSize.L),
-                          DataColumn2(
-                              label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold)),
-                              size: ColumnSize.M),
-                          DataColumn2(
-                              label: Text('Estatus', style: TextStyle(fontWeight: FontWeight.bold)),
-                              size: ColumnSize.M),
-                          DataColumn2(
-                            label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold)),
-                            size: ColumnSize.S,
-                            fixedWidth: 100,
-                          ),
+                          DataColumn2(label: Text('Usuario/Nombre', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.L),
+                          DataColumn2(label: Text('Correo Electrónico', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.L),
+                          DataColumn2(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
+                          DataColumn2(label: Text('Estatus', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
+                          DataColumn2(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.S, fixedWidth: 100),
                         ],
                         rows: _filteredUsers.map((u) {
                           final isBlocked = u.status == 'Bloqueado';
                           return DataRow(
                             cells: [
-                              DataCell(Text(u.name, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold))),
+                              DataCell(Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(u.name, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+                                  Text('@${u.username}', style: const TextStyle(color: Colors.black45, fontSize: 12)),
+                                ],
+                              )),
                               DataCell(Text(u.email, style: const TextStyle(color: Colors.black87))),
                               DataCell(
                                 Chip(
@@ -760,50 +1185,16 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                                 ),
                               ),
                               DataCell(
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, color: Colors.black54),
-                                  onSelected: (val) {
-                                    if (val == 'password') {
-                                      _showChangePasswordDialog(u);
-                                    } else if (val == 'block') {
-                                      _toggleUserBlock(u, true);
-                                    } else if (val == 'unblock') {
-                                      _toggleUserBlock(u, false);
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'password',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.lock_open, size: 20, color: Colors.blue),
-                                          SizedBox(width: 8),
-                                          Text('Contraseña'),
-                                        ],
-                                      ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                      onPressed: () => _showEditUserDialog(u),
                                     ),
-                                    if (!isBlocked)
-                                      const PopupMenuItem(
-                                        value: 'block',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.block, size: 20, color: Colors.red),
-                                            SizedBox(width: 8),
-                                            Text('Bloquear'),
-                                          ],
-                                        ),
-                                      )
-                                    else
-                                      const PopupMenuItem(
-                                        value: 'unblock',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.check_circle_outline, size: 20, color: Colors.green),
-                                            SizedBox(width: 8),
-                                            Text('Desbloquear'),
-                                          ],
-                                        ),
-                                      ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                      onPressed: () => _confirmDeleteUser(u),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -828,738 +1219,160 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header Card with add button for Roles
-          Card(
+          const Card(
             color: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.black12),
-            ),
             elevation: 2,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Listado de Roles Disponibles',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                  Text(
+                    'Matriz de Roles y Permisos del Sistema',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF416FDF)),
                   ),
-                  Tooltip(
-                    message: 'Agregar Nuevo Rol',
-                    child: IconButton(
-                      onPressed: _showCreateRoleDialog,
-                      icon: const Icon(Icons.add, size: 24),
-                      style: IconButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.all(12),
-                        elevation: 3,
-                        shape: const CircleBorder(),
-                      ),
-                    ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Los niveles de acceso están estandarizados para garantizar la seguridad operacional.',
+                    style: TextStyle(fontSize: 13, color: Colors.black54),
                   ),
                 ],
               ),
             ),
           ),
-
           const SizedBox(height: 20),
 
-          // Grid list of roles
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final crossAxisCount = constraints.maxWidth > 900
-                  ? 3
-                  : (constraints.maxWidth > 600 ? 2 : 1);
-              final itemWidth = (constraints.maxWidth - (crossAxisCount - 1) * 16) / crossAxisCount;
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: _staticRoles.map((role) {
+              final int count = _users.where((u) => u.role.toLowerCase() == role.name.toLowerCase()).length;
 
-              return Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: _systemRoles.map((role) {
-                  final int userCount = _users.where((u) => u.role == role.name).length;
-
-                  return Container(
-                    width: itemWidth,
-                    constraints: const BoxConstraints(minHeight: 220),
-                    child: Card(
-                      color: Colors.white,
-                      surfaceTintColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        side: const BorderSide(color: Colors.black12),
-                      ),
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+              return Container(
+                width: 340,
+                child: Card(
+                  color: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    side: const BorderSide(color: Colors.black12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // Title and User Count Badge
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    role.name,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF416FDF),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.indigo.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: Colors.indigo.shade100),
-                                  ),
-                                  child: Text(
-                                    '$userCount ${userCount == 1 ? "usuario" : "usuarios"}',
-                                    style: TextStyle(
-                                      color: Colors.indigo.shade700,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
-                                  onSelected: (val) {
-                                    if (val == 'edit') {
-                                      _showEditRoleDialog(role);
-                                    } else if (val == 'delete') {
-                                      _confirmDeleteRole(role);
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit, color: Colors.blue, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Editar permisos'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete, color: Colors.red, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Eliminar rol'),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            // Description
                             Text(
-                              role.description,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.black54,
-                                height: 1.4,
-                              ),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
+                              role.name,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF416FDF)),
                             ),
-                            const SizedBox(height: 16),
-                            const Divider(color: Colors.black12),
-                            const SizedBox(height: 10),
-                            // Permissions Header
-                            const Text(
-                              'Permisos Asignados:',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            // Permissions Chips
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: role.permissions.map((perm) {
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.black12),
-                                  ),
-                                  child: Text(
-                                    perm,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
+                            Chip(
+                              backgroundColor: Colors.indigo.shade50,
+                              label: Text('$count usuarios', style: TextStyle(color: Colors.indigo.shade700, fontWeight: FontWeight.bold, fontSize: 11)),
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Text(role.description, style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                        const Divider(height: 24),
+                        const Text('Permisos Estáticos:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        const SizedBox(height: 8),
+                        ...role.permissions.map((p) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_outline, color: Colors.green, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(p, style: const TextStyle(fontSize: 12, color: Colors.black87))),
+                            ],
+                          ),
+                        )),
+                      ],
                     ),
-                  );
-                }).toList(),
+                  ),
+                ),
               );
-            },
+            }).toList(),
           ),
         ],
       ),
     );
   }
 
-  void _showCreateRoleDialog() {
-    final nameController = TextEditingController();
-    final descController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    // List of key permissions
-    final List<String> availablePermissions = [
-      'Crear Usuarios',
-      'Bloquear Usuarios',
-      'Gestionar Censos',
-      'Registrar Ayudas',
-      'Registrar Eventos',
-      'Ver Historial',
-      'Editar Registros',
-      'Acceso a Seguridad',
-      'Exportar Reportes'
-    ];
-
-    final List<String> selectedPermissions = [];
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setStateModal) {
-            final size = MediaQuery.of(dialogContext).size;
-            final isMobile = size.width < 600;
-
-            return Dialog(
-              alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
-              insetPadding: isMobile ? const EdgeInsets.only(top: 40) : const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
-              shape: RoundedRectangleBorder(
-                borderRadius: isMobile 
-                  ? const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))
-                  : BorderRadius.circular(16),
+  Widget _buildSectoresTab(ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Sectores Comunitarios',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
-              backgroundColor: Colors.white,
-              elevation: 8,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 500,
-                  maxHeight: isMobile ? size.height * 0.9 : size.height * 0.85,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF416FDF),
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(16),
-                          topRight: const Radius.circular(16),
-                          bottomLeft: isMobile ? Radius.zero : Radius.zero,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Crear Nuevo Rol',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            icon: const Icon(Icons.close, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Form content
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
-                        child: Form(
-                          key: formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Nombre del Rol *',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: nameController,
-                                style: const TextStyle(color: Colors.black87),
-                                decoration: InputDecoration(
-                                  hintText: 'Ej. Supervisor de Proyectos',
-                                  hintStyle: const TextStyle(color: Colors.black38),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                                validator: (v) {
-                                  if (v == null || v.isEmpty) return 'El nombre es obligatorio';
-                                  if (_roles.any((r) => r.trim().toLowerCase() == v.trim().toLowerCase())) {
-                                    return 'Este rol ya existe en el sistema';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-
-                              const Text(
-                                'Descripción *',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: descController,
-                                maxLines: 2,
-                                style: const TextStyle(color: Colors.black87),
-                                decoration: InputDecoration(
-                                  hintText: 'Ej. Encargado de fiscalizar censos y ayuda local.',
-                                  hintStyle: const TextStyle(color: Colors.black38),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                                validator: (v) => v == null || v.isEmpty ? 'La descripción es obligatoria' : null,
-                              ),
-                              const SizedBox(height: 16),
-
-                              const Text(
-                                'Asignar Permisos del Rol',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 15),
-                              ),
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: availablePermissions.map((perm) {
-                                  final isSelected = selectedPermissions.contains(perm);
-                                  return FilterChip(
-                                    label: Text(
-                                      perm,
-                                      style: TextStyle(
-                                        color: isSelected ? Colors.white : Colors.black87,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    selected: isSelected,
-                                    selectedColor: const Color(0xFF416FDF),
-                                    checkmarkColor: Colors.white,
-                                    backgroundColor: Colors.grey.shade100,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      side: BorderSide(color: isSelected ? Colors.transparent : Colors.black12),
-                                    ),
-                                    onSelected: (val) {
-                                      setStateModal(() {
-                                        if (val) {
-                                          selectedPermissions.add(perm);
-                                        } else {
-                                          selectedPermissions.remove(perm);
-                                        }
-                                      });
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Footer
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                        color: Colors.grey.shade50,
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('Cancelar', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF416FDF),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              elevation: 2,
-                            ),
-                            onPressed: () {
-                              if (formKey.currentState!.validate()) {
-                                setState(() {
-                                  _systemRoles.add(
-                                    SystemRole(
-                                      name: nameController.text.trim(),
-                                      description: descController.text.trim(),
-                                      permissions: selectedPermissions.isEmpty
-                                          ? ['Acceso Básico']
-                                          : List.from(selectedPermissions),
-                                    ),
-                                  );
-                                });
-                                Navigator.pop(dialogContext);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Rol "${nameController.text}" creado con éxito.'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              ElevatedButton.icon(
+                onPressed: () => _showSectorModal(),
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar Sector'),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF416FDF), foregroundColor: Colors.white),
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showEditRoleDialog(SystemRole role) {
-    final nameController = TextEditingController(text: role.name);
-    final descController = TextEditingController(text: role.description);
-    final formKey = GlobalKey<FormState>();
-
-    final List<String> availablePermissions = [
-      'Crear Usuarios',
-      'Bloquear Usuarios',
-      'Gestionar Censos',
-      'Registrar Ayudas',
-      'Registrar Eventos',
-      'Ver Historial',
-      'Editar Registros',
-      'Acceso a Seguridad',
-      'Exportar Reportes'
-    ];
-
-    final List<String> selectedPermissions = List.from(role.permissions);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setStateModal) {
-            final size = MediaQuery.of(dialogContext).size;
-            final isMobile = size.width < 600;
-
-            return Dialog(
-              alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
-              insetPadding: isMobile ? const EdgeInsets.only(top: 40) : const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
-              shape: RoundedRectangleBorder(
-                borderRadius: isMobile 
-                  ? const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))
-                  : BorderRadius.circular(16),
-              ),
-              backgroundColor: Colors.white,
-              elevation: 8,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 500,
-                  maxHeight: isMobile ? size.height * 0.9 : size.height * 0.85,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF416FDF),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Editar Rol',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            icon: const Icon(Icons.close, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Form content
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
-                        child: Form(
-                          key: formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Nombre del Rol *',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: nameController,
-                                style: const TextStyle(color: Colors.black87),
-                                decoration: InputDecoration(
-                                  hintText: 'Ej. Supervisor de Proyectos',
-                                  hintStyle: const TextStyle(color: Colors.black38),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                                validator: (v) {
-                                  if (v == null || v.isEmpty) return 'El nombre es obligatorio';
-                                  if (v.trim().toLowerCase() != role.name.trim().toLowerCase() && 
-                                      _roles.any((r) => r.trim().toLowerCase() == v.trim().toLowerCase())) {
-                                    return 'Este rol ya existe en el sistema';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-
-                              const Text(
-                                'Descripción *',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: descController,
-                                maxLines: 2,
-                                style: const TextStyle(color: Colors.black87),
-                                decoration: InputDecoration(
-                                  hintText: 'Ej. Encargado de fiscalizar censos y ayuda local.',
-                                  hintStyle: const TextStyle(color: Colors.black38),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                ),
-                                validator: (v) => v == null || v.isEmpty ? 'La descripción es obligatoria' : null,
-                              ),
-                              const SizedBox(height: 16),
-
-                              const Text(
-                                'Asignar Permisos del Rol',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 15),
-                              ),
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: availablePermissions.map((perm) {
-                                  final isSelected = selectedPermissions.contains(perm);
-                                  return FilterChip(
-                                    label: Text(
-                                      perm,
-                                      style: TextStyle(
-                                        color: isSelected ? Colors.white : Colors.black87,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    selected: isSelected,
-                                    selectedColor: const Color(0xFF416FDF),
-                                    checkmarkColor: Colors.white,
-                                    backgroundColor: Colors.grey.shade100,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      side: BorderSide(color: isSelected ? Colors.transparent : Colors.black12),
-                                    ),
-                                    onSelected: (val) {
-                                      setStateModal(() {
-                                        if (val) {
-                                          selectedPermissions.add(perm);
-                                        } else {
-                                          selectedPermissions.remove(perm);
-                                        }
-                                      });
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Footer
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                        color: Colors.grey.shade50,
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('Cancelar', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF416FDF),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              elevation: 2,
-                            ),
-                            onPressed: () {
-                              if (formKey.currentState!.validate()) {
-                                final oldName = role.name;
-                                final newName = nameController.text.trim();
-                                setState(() {
-                                  final idx = _systemRoles.indexWhere((r) => r.name == role.name);
-                                  if (idx != -1) {
-                                    _systemRoles[idx] = SystemRole(
-                                      name: newName,
-                                      description: descController.text.trim(),
-                                      permissions: selectedPermissions.isEmpty
-                                          ? ['Acceso Básico']
-                                          : List.from(selectedPermissions),
-                                    );
-                                  }
-                                  if (newName != oldName) {
-                                    for (var i = 0; i < _users.length; i++) {
-                                      if (_users[i].role == oldName) {
-                                        _users[i] = _users[i].copyWith(role: newName);
-                                      }
-                                    }
-                                  }
-                                });
-                                Navigator.pop(dialogContext);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Rol "$newName" actualizado con éxito.'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _confirmDeleteRole(SystemRole role) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white,
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Eliminar Rol', style: TextStyle(color: Colors.black87)),
-          ],
-        ),
-        content: Text(
-          '¿Está seguro de eliminar el rol "${role.name}"? Los usuarios con este rol serán reasignados al rol "Operador".',
-          style: const TextStyle(color: Colors.black54),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+            ],
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              setState(() {
-                _systemRoles.removeWhere((r) => r.name == role.name);
-                for (var i = 0; i < _users.length; i++) {
-                  if (_users[i].role == role.name) {
-                    _users[i] = _users[i].copyWith(role: 'Operador');
-                  }
-                }
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Rol "${role.name}" eliminado correctamente.'),
-                  backgroundColor: Colors.redAccent,
+          const SizedBox(height: 16),
+
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: _sectores.map((sec) {
+              return Container(
+                width: 320,
+                child: Card(
+                  color: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Colors.black12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(sec.nombre, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF416FDF))),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                              onPressed: () => _showSectorModal(sector: sec),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                              onPressed: () async {
+                                final mongo = sl<MongoDBService>();
+                                final sectoresBox = await Hive.openBox('sectores_box');
+                                try {
+                                  await mongo.deleteRecord('sectores', sec.id);
+                                } catch (_) {}
+                                await sectoresBox.delete(sec.id);
+
+                                setState(() => _sectores.removeWhere((s) => s.id == sec.id));
+                                sl<AuditLoggerService>().log('Eliminó el sector "${sec.nombre}"');
+                              },
+                            ),
+                          ],
+                        ),
+                        Text(sec.descripcion.isEmpty ? 'Sin descripción' : sec.descripcion, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                      ],
+                    ),
+                  ),
                 ),
               );
-            },
-            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+            }).toList(),
           ),
         ],
       ),

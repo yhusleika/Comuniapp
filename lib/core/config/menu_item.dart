@@ -14,14 +14,9 @@ class MenuItem {
 
 const appMenuItems = <MenuItem>[
   MenuItem(
-    title: 'Dashboard',
+    title: 'Inicio',
     link: '/dashboard',
-    icon: Icons.dashboard,
-  ),
-  MenuItem(
-    title: 'Perfil',
-    link: '/profile',
-    icon: Icons.person_outline,
+    icon: Icons.home_outlined,
   ),
   MenuItem(
     title: 'Ayudas',
@@ -39,7 +34,7 @@ const appMenuItems = <MenuItem>[
     icon: Icons.people_outline,
   ),
   MenuItem(
-    title: 'Eventos/Jornadas/Proyectos',
+    title: 'Gestión de Actividades',
     link: '/eventos',
     icon: Icons.event_note_outlined,
   ),

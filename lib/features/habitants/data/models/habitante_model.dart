@@ -56,6 +56,9 @@ class HabitanteModel extends Habitante {
   @override
   @HiveField(16)
   final String ayudaRecibida;
+  @override
+  @HiveField(17)
+  final DateTime? fechaNacimiento;
 
   const HabitanteModel({
     required this.id,
@@ -73,6 +76,7 @@ class HabitanteModel extends Habitante {
     required this.tipoVivienda,
     required this.registeredBy,
     required this.fechaRegistro,
+    this.fechaNacimiento,
     this.isSynced = false,
     this.ayudaRecibida = '',
   }) : super(
@@ -92,6 +96,7 @@ class HabitanteModel extends Habitante {
           tipoVivienda: tipoVivienda,
           registeredBy: registeredBy,
           fechaRegistro: fechaRegistro,
+          fechaNacimiento: fechaNacimiento,
           isSynced: isSynced,
         );
 
@@ -113,6 +118,7 @@ class HabitanteModel extends Habitante {
       tipoVivienda: habitante.tipoVivienda,
       registeredBy: habitante.registeredBy,
       fechaRegistro: habitante.fechaRegistro,
+      fechaNacimiento: habitante.fechaNacimiento,
       isSynced: habitante.isSynced,
     );
   }
@@ -134,6 +140,7 @@ class HabitanteModel extends Habitante {
       'tipoVivienda': tipoVivienda,
       'registeredBy': registeredBy,
       'fechaRegistro': fechaRegistro.toIso8601String(),
+      'fechaNacimiento': fechaNacimiento?.toIso8601String(),
       'isSynced': isSynced,
       'ayudaRecibida': ayudaRecibida,
     };
@@ -156,6 +163,7 @@ class HabitanteModel extends Habitante {
       tipoVivienda: json['tipoVivienda'] ?? '',
       registeredBy: json['registeredBy'] ?? '',
       fechaRegistro: DateTime.tryParse(json['fechaRegistro'] ?? '') ?? DateTime.now(),
+      fechaNacimiento: json['fechaNacimiento'] != null ? DateTime.tryParse(json['fechaNacimiento']) : null,
       isSynced: true,
       ayudaRecibida: json['ayudaRecibida'] ?? '',
     );

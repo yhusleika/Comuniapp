@@ -32,6 +32,7 @@ class HabitanteModelAdapter extends TypeAdapter<HabitanteModel> {
       tipoVivienda: fields[12] as String,
       registeredBy: fields[13] as String,
       fechaRegistro: fields[14] as DateTime,
+      fechaNacimiento: fields[17] as DateTime?,
       isSynced: fields[15] as bool,
       ayudaRecibida: fields[16] as String,
     );
@@ -40,7 +41,7 @@ class HabitanteModelAdapter extends TypeAdapter<HabitanteModel> {
   @override
   void write(BinaryWriter writer, HabitanteModel obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +75,9 @@ class HabitanteModelAdapter extends TypeAdapter<HabitanteModel> {
       ..writeByte(15)
       ..write(obj.isSynced)
       ..writeByte(16)
-      ..write(obj.ayudaRecibida);
+      ..write(obj.ayudaRecibida)
+      ..writeByte(17)
+      ..write(obj.fechaNacimiento);
   }
 
   @override

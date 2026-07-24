@@ -45,14 +45,58 @@ class AuditoriaRepositoryImpl implements AuditoriaRepository {
   @override
   Future<Either<Failure, void>> addAuditLog(AuditLog log) async {
     try {
+      final isConnected = await networkInfo.isConnected;
+      bool apiSynced = false;
+      
       final model = AuditLogModel.fromEntity(log);
       
-      final isConnected = await networkInfo.isConnected;
       if (isConnected) {
-        await mongoDBService.createRecord('auditoria', model.toJson());
+        apiSynced = await mongoDBService.createRecord('auditoria', model.toJson());
       }
       
-      await localDataSource.cacheAuditLog(model);
+      final cacheModel = AuditLogModel(
+        id: model.id,
+        user: model.user,
+        role: model.role,
+        action: model.action,
+        dateTime: model.dateTime,
+        isSynced: apiSynced,
+      );
+      
+      await localDataSource.cacheAuditLog(cacheModel);
+      return const Right(null);
+    } catch (e) {
+      return Left(CacheFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<AuditLog>>> getUnsyncedAuditLogs() async {
+    try {
+      final logs = await localDataSource.getAuditLogs();
+      return Right(logs.where((l) => !l.isSynced).map((m) => m.toEntity()).toList());
+    } catch (e) {
+      return Left(CacheFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> markAuditLogAsSynced(String id) async {
+    try {
+      final logs = await localDataSource.getAuditLogs();
+      final index = logs.indexWhere((l) => l.id == id);
+      if (index != -1) {
+        final l = logs[index];
+        final updated = AuditLogModel(
+          id: l.id,
+          user: l.user,
+          role: l.role,
+          action: l.action,
+          dateTime: l.dateTime,
+          isSynced: true,
+        );
+        await localDataSource.cacheAuditLog(updated);
+      }
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

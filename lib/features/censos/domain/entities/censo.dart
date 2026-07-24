@@ -7,6 +7,7 @@ class Censo extends Equatable {
   final String responsable;
   final DateTime fecha;
   final List<String> camposSeleccionados;
+  final bool isSynced;
 
   const Censo({
     required this.id,
@@ -15,8 +16,9 @@ class Censo extends Equatable {
     required this.responsable,
     required this.fecha,
     this.camposSeleccionados = const [],
+    this.isSynced = false,
   });
 
   @override
-  List<Object?> get props => [id, nombre, zona, responsable, fecha, camposSeleccionados];
+  List<Object?> get props => [id, nombre, zona, responsable, fecha, camposSeleccionados, isSynced];
 }

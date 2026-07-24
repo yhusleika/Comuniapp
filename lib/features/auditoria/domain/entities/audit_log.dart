@@ -4,6 +4,7 @@ class AuditLog {
   final String role;
   final String action;
   final DateTime dateTime;
+  final bool isSynced;
 
   AuditLog({
     required this.id,
@@ -11,5 +12,6 @@ class AuditLog {
     required this.role,
     required this.action,
     required this.dateTime,
+    this.isSynced = false,
   });
 }

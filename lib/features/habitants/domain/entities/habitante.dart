@@ -17,6 +17,7 @@ class Habitante extends Equatable {
   final String tipoVivienda; // Casa, Apartamento, Rancho, etc.
   final String registeredBy; // ID del vocero
   final DateTime fechaRegistro;
+  final DateTime? fechaNacimiento;
   final bool isSynced;
 
   const Habitante({
@@ -36,6 +37,7 @@ class Habitante extends Equatable {
     required this.tipoVivienda,
     required this.registeredBy,
     required this.fechaRegistro,
+    this.fechaNacimiento,
     this.isSynced = false,
   });
 

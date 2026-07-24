@@ -3,7 +3,7 @@ import '../../domain/entities/ayuda_type.dart';
 import '../../../habitants/domain/entities/habitante.dart';
 
 class AyudasNotifier extends ChangeNotifier {
-  final bool isAuditor;
+  bool isAuditor;
   List<Habitante> _allHabitants = [];
   List<AyudaType> _ayudaTypes = [];
   List<Habitante> _filteredBeneficiaries = [];
@@ -40,7 +40,10 @@ class AyudasNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateData(List<Habitante> inhabitants, List<AyudaType> types) {
+  void updateData(List<Habitante> inhabitants, List<AyudaType> types, {bool? isAuditor}) {
+    if (isAuditor != null) {
+      this.isAuditor = isAuditor;
+    }
     _allHabitants = inhabitants;
     _ayudaTypes = types;
     _applyFilters();
@@ -88,26 +91,38 @@ class BeneficiariesDataTableSource extends DataTableSource {
   }
 
   Widget _buildAidChip(String aid) {
-    Color color;
-    switch (aid) {
-      case 'Alimentación':
-        color = Colors.green;
-        break;
-      case 'Medicinas':
-        color = Colors.blue;
-        break;
-      case 'Vivienda':
-        color = Colors.orange;
-        break;
-      default:
-        color = Colors.grey;
+    final List<String> aids = aid.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (aids.isEmpty) {
+      return const Text('-');
     }
-    return Chip(
-      label:
-          Text(aid, style: const TextStyle(color: Colors.white, fontSize: 12)),
-      backgroundColor: color,
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
+    
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: aids.map((a) {
+        Color color;
+        switch (a) {
+          case 'Alimentación':
+            color = Colors.green;
+            break;
+          case 'Medicinas':
+            color = Colors.blue;
+            break;
+          case 'Vivienda':
+            color = Colors.orange;
+            break;
+          default:
+            color = Colors.indigo;
+        }
+        return Chip(
+          label:
+              Text(a, style: const TextStyle(color: Colors.white, fontSize: 11)),
+          backgroundColor: color,
+          padding: EdgeInsets.zero,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        );
+      }).toList(),
     );
   }
 

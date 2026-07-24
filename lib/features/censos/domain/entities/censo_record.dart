@@ -9,6 +9,8 @@ class CensoRecord extends Equatable {
   final int numeroHijos;
   final String estatus; // Censado, Pendiente, Casos Especiales
   final Map<String, dynamic> datosDinamicos;
+  final bool isSynced;
+  final int? numEncuesta;
 
   const CensoRecord({
     required this.id,
@@ -19,9 +21,11 @@ class CensoRecord extends Equatable {
     required this.numeroHijos,
     required this.estatus,
     this.datosDinamicos = const {},
+    this.isSynced = false,
+    this.numEncuesta,
   });
 
   @override
   List<Object?> get props =>
-      [id, censoId, jefeFamilia, cedula, direccion, numeroHijos, estatus, datosDinamicos];
+      [id, censoId, jefeFamilia, cedula, direccion, numeroHijos, estatus, datosDinamicos, isSynced, numEncuesta];
 }

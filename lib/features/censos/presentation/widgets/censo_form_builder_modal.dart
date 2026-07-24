@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../core/utils/user_roles_helper.dart';
 import '../../domain/entities/censo.dart';
 import '../../domain/entities/censo_record.dart';
 import '../../domain/entities/censo_fields_dictionary.dart';
@@ -25,19 +26,9 @@ class _CensoFormBuilderModalState extends State<CensoFormBuilderModal> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nombreController;
   late final TextEditingController _descripcionController;
-  late final TextEditingController _searchController;
   
   String? _selectedResponsable;
-  final List<String> _responsables = [
-    'María Rodríguez (Consejo)',
-    'Juan Pérez (Consejo)',
-    'Ana López (Consejo)',
-    'Carlos Silva (Consejo)',
-    'Luisa Hernández (Consejo)'
-  ];
-
-  final List<Habitante> _selectedHabitants = [];
-  List<Habitante> _searchResults = [];
+  List<String> _responsables = UserRolesHelper.getOperadores();
   
   // Dynamic fields selection list
   final List<String> _selectedFields = [];
@@ -47,8 +38,8 @@ class _CensoFormBuilderModalState extends State<CensoFormBuilderModal> {
     super.initState();
     _nombreController = TextEditingController();
     _descripcionController = TextEditingController();
-    _searchController = TextEditingController();
-    _selectedResponsable = _responsables.first;
+    _selectedResponsable = _responsables.isNotEmpty ? _responsables.first : '';
+    _loadOperadores();
 
     // Core required fields preselected and locked by default
     _selectedFields.addAll([
@@ -58,36 +49,22 @@ class _CensoFormBuilderModalState extends State<CensoFormBuilderModal> {
     ]);
   }
 
+  Future<void> _loadOperadores() async {
+    final ops = await UserRolesHelper.fetchOperadoresAsync();
+    if (!mounted) return;
+    setState(() {
+      _responsables = ops;
+      if (_selectedResponsable == null || !_responsables.contains(_selectedResponsable)) {
+        _selectedResponsable = _responsables.isNotEmpty ? _responsables.first : '';
+      }
+    });
+  }
+
   @override
   void dispose() {
     _nombreController.dispose();
     _descripcionController.dispose();
-    _searchController.dispose();
     super.dispose();
-  }
-
-  void _searchHabitants(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-      });
-      return;
-    }
-
-    final filtered = widget.allHabitants.where((h) {
-      final nameMatches = h.nombres.toLowerCase().contains(query.toLowerCase()) ||
-          h.apellidos.toLowerCase().contains(query.toLowerCase());
-      final cedulaMatches = h.cedula.contains(query);
-      
-      // Exclude already selected ones
-      final isAlreadySelected = _selectedHabitants.any((sh) => sh.id == h.id);
-      
-      return (nameMatches || cedulaMatches) && !isAlreadySelected;
-    }).toList();
-
-    setState(() {
-      _searchResults = filtered;
-    });
   }
 
   void _toggleField(String fieldId, bool? select) {
@@ -404,7 +381,7 @@ class _CensoFormBuilderModalState extends State<CensoFormBuilderModal> {
 
                       // Descripción
                       const Text(
-                        'Descripción (Zona/Comunidad) *',
+                        'Descripción (Sector/Comunidad) *',
                         style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -428,98 +405,6 @@ class _CensoFormBuilderModalState extends State<CensoFormBuilderModal> {
                       
                       // DYNAMIC FIELDS SELECTOR ACCORDIONS
                       _buildFieldsSelector(),
-
-                      // Buscador de Habitantes (Selección Múltiple)
-                      const Text(
-                        'Agregar Habitantes al Censo',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF416FDF)),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _searchController,
-                        onChanged: _searchHabitants,
-                        style: const TextStyle(color: Colors.black87),
-                        decoration: InputDecoration(
-                          hintText: 'Buscar por nombre o cédula...',
-                          hintStyle: const TextStyle(color: Colors.black38),
-                          prefixIcon: const Icon(Icons.search, color: Color(0xFF416FDF)),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                      
-                      // Resultados de la búsqueda
-                      if (_searchResults.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          constraints: const BoxConstraints(maxHeight: 150),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: _searchResults.length,
-                            itemBuilder: (context, index) {
-                              final h = _searchResults[index];
-                              return ListTile(
-                                dense: true,
-                                title: Text('${h.nombres} ${h.apellidos}', style: const TextStyle(color: Colors.black87)),
-                                subtitle: Text('Cédula: ${h.cedula}', style: const TextStyle(color: Colors.black54)),
-                                trailing: const Icon(Icons.add_circle_outline, color: Color(0xFF416FDF)),
-                                onTap: () {
-                                  setState(() {
-                                    _selectedHabitants.add(h);
-                                    _searchController.clear();
-                                    _searchResults = [];
-                                  });
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Habitantes seleccionados
-                      const Text(
-                        'Habitantes Seleccionados:',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_selectedHabitants.isNotEmpty) ...[
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _selectedHabitants.map((h) {
-                            return Chip(
-                              backgroundColor: Colors.grey.shade100,
-                              side: const BorderSide(color: Colors.black12),
-                              label: Text(
-                                '${h.nombres} ${h.apellidos}',
-                                style: const TextStyle(color: Colors.black87, fontSize: 13),
-                              ),
-                              deleteIcon: const Icon(Icons.cancel, size: 18, color: Colors.redAccent),
-                              onDeleted: () {
-                                setState(() {
-                                  _selectedHabitants.removeWhere((sh) => sh.id == h.id);
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
-                      ] else ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8.0),
-                          child: Text(
-                            'Ningún habitante seleccionado aún. Se crearán registros iniciales vacíos si guarda así.',
-                            style: TextStyle(color: Colors.black38, fontStyle: FontStyle.italic, fontSize: 13),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -567,32 +452,8 @@ class _CensoFormBuilderModalState extends State<CensoFormBuilderModal> {
                           camposSeleccionados: List<String>.from(_selectedFields),
                         );
 
-                        // 1. Dispatch Censo creation
+                        // Dispatch Censo creation
                         context.read<CensosBloc>().add(CreateCenso(newCenso));
-
-                        // 2. Dispatch a CensoRecord with pre-populated dynamic data for each selected habitant
-                        for (final h in _selectedHabitants) {
-                          final newRecord = CensoRecord(
-                            id: const Uuid().v4(),
-                            censoId: censoId,
-                            jefeFamilia: '${h.nombres} ${h.apellidos}',
-                            cedula: h.cedula,
-                            direccion: '${h.sector}, Ref: ${h.puntoReferencia.isNotEmpty ? h.puntoReferencia : "Comunidad"}',
-                            numeroHijos: 0,
-                            estatus: 'Pendientes',
-                            datosDinamicos: {
-                              'familiares': [
-                                {
-                                  'es_jefe_familia': 'Sí',
-                                  'jefeFamilia': '${h.nombres} ${h.apellidos}',
-                                  'cedula': h.cedula,
-                                }
-                              ],
-                              'estatus': 'Pendientes',
-                            },
-                          );
-                          context.read<CensosBloc>().add(AddCensoRecordEvent(newRecord));
-                        }
 
                         // Close modal
                         Navigator.pop(context);

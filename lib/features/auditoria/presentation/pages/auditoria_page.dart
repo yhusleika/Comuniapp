@@ -17,6 +17,7 @@ import '../bloc/auditoria_bloc.dart';
 import '../bloc/auditoria_event.dart';
 import '../bloc/auditoria_state.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_logger_service.dart';
 
 class AuditoriaPage extends StatelessWidget {
   const AuditoriaPage({super.key});
@@ -39,7 +40,7 @@ class AuditoriaView extends StatefulWidget {
 
 class _AuditoriaViewState extends State<AuditoriaView> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  final List<AuditLog> _logs = [];
+  List<AuditLog> _logs = [];
 
   // Estados de filtros
   DateTimeRange? _selectedDateRange;
@@ -244,80 +245,6 @@ class _AuditoriaViewState extends State<AuditoriaView> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.read<AuthBloc>().state;
-    
-    // Check if the user is authenticated and is an Administrator
-    final bool isAdmin = authState is AuthAuthenticated && 
-        (authState.user.role.trim().toLowerCase() == 'admin');
-
-    if (!isAdmin) {
-      // Access Denied Screen (highly premium layout)
-      return Scaffold(
-        backgroundColor: const Color(0xFF1E1E2D),
-        body: Center(
-          child: SingleChildScrollView(
-            child: Container(
-              margin: const EdgeInsets.all(24.0),
-              padding: const EdgeInsets.all(32.0),
-              constraints: const BoxConstraints(maxWidth: 450),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 15, offset: Offset(0, 4)),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.lock, size: 72, color: Colors.redAccent),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Acceso Restringido',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Esta sección de auditoría y seguridad es de lectura exclusiva para administradores del sistema.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black54, fontSize: 14),
-                  ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF416FDF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () => context.go('/dashboard'),
-                      child: const Text(
-                        'Volver al Dashboard',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     final theme = Theme.of(context);
 
     return CustomScaffold(
@@ -328,17 +255,29 @@ class _AuditoriaViewState extends State<AuditoriaView> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Error: ${state.message}'), backgroundColor: Colors.red),
             );
-          } else if (state is AuditoriaLoaded) {
-            setState(() {
-              _logs.clear();
-              _logs.addAll(state.logs);
-            });
           }
         },
         builder: (context, state) {
-          if (state is AuditoriaLoading) {
+          if (state is AuditoriaLoading && _logs.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
+
+          if (state is AuditoriaLoaded) {
+            _logs = state.logs.map((log) {
+              final rawUser = log.user.trim();
+              final displayUser = rawUser.isEmpty ? 'admin' : rawUser;
+              final displayRole = AuditLoggerService.formatRole(log.role);
+              final displayAction = AuditLoggerService.sanitizeAction(log.action);
+              return AuditLog(
+                id: log.id,
+                user: displayUser,
+                role: displayRole,
+                action: displayAction,
+                dateTime: log.dateTime,
+              );
+            }).toList();
+          }
+
           return SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -528,7 +467,7 @@ class _AuditoriaViewState extends State<AuditoriaView> {
                           Widget userDropdown = DropdownButtonFormField<String>(
                             isExpanded: true,
                             dropdownColor: Colors.white,
-                            value: _selectedUserFilter,
+                            value: _availableUsers.contains(_selectedUserFilter) ? _selectedUserFilter : 'Todos',
                             style: const TextStyle(color: Colors.black87, fontSize: 14),
                             decoration: InputDecoration(
                               labelText: 'Filtrar por Usuario',
@@ -555,7 +494,7 @@ class _AuditoriaViewState extends State<AuditoriaView> {
                           Widget roleDropdown = DropdownButtonFormField<String>(
                             isExpanded: true,
                             dropdownColor: Colors.white,
-                            value: _selectedRoleFilter,
+                            value: _availableRoles.contains(_selectedRoleFilter) ? _selectedRoleFilter : 'Todos',
                             style: const TextStyle(color: Colors.black87, fontSize: 14),
                             decoration: InputDecoration(
                               labelText: 'Filtrar por Rol',
@@ -682,12 +621,12 @@ class _AuditoriaViewState extends State<AuditoriaView> {
                                   ),
                                   DataCell(
                                     Chip(
-                                      backgroundColor: log.role.trim().toLowerCase() == 'admin' ? Colors.red.shade50 : Colors.blue.shade50,
-                                      side: BorderSide(color: log.role.trim().toLowerCase() == 'admin' ? Colors.red.shade100 : Colors.blue.shade100),
+                                      backgroundColor: log.role.trim().toLowerCase().contains('admin') ? Colors.red.shade50 : Colors.blue.shade50,
+                                      side: BorderSide(color: log.role.trim().toLowerCase().contains('admin') ? Colors.red.shade100 : Colors.blue.shade100),
                                       label: Text(
                                         log.role,
                                         style: TextStyle(
-                                          color: log.role.trim().toLowerCase() == 'admin' ? Colors.red.shade700 : Colors.blue.shade700,
+                                          color: log.role.trim().toLowerCase().contains('admin') ? Colors.red.shade700 : Colors.blue.shade700,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 11,
                                         ),

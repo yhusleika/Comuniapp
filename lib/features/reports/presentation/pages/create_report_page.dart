@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
@@ -22,7 +23,7 @@ class _CreateReportPageState extends State<CreateReportPage> {
   
   String _tipo = 'Agua';
   String _prioridad = 'Media';
-  File? _imageFile;
+  String? _imagePath;
   bool _isCompressing = false;
 
   final ImagePicker _picker = ImagePicker();
@@ -30,14 +31,20 @@ class _CreateReportPageState extends State<CreateReportPage> {
   Future<void> _pickImage() async {
     final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
     if (photo != null) {
-      setState(() => _isCompressing = true);
-      // Compress
-      final compressedPath = await sl<ImageCompressionService>().saveCompressedImage(File(photo.path));
-      
-      setState(() {
-        _imageFile = File(compressedPath);
-        _isCompressing = false;
-      });
+      if (kIsWeb) {
+        setState(() {
+          _imagePath = photo.path;
+        });
+      } else {
+        setState(() => _isCompressing = true);
+        // Compress
+        final compressedPath = await sl<ImageCompressionService>().saveCompressedImage(File(photo.path));
+        
+        setState(() {
+          _imagePath = compressedPath;
+          _isCompressing = false;
+        });
+      }
     }
   }
 
@@ -70,8 +77,10 @@ class _CreateReportPageState extends State<CreateReportPage> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey),
                       ),
-                      child: _imageFile != null
-                          ? Image.file(_imageFile!, fit: BoxFit.cover)
+                      child: _imagePath != null
+                          ? (kIsWeb
+                              ? Image.network(_imagePath!, fit: BoxFit.cover)
+                              : Image.file(File(_imagePath!), fit: BoxFit.cover))
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -121,7 +130,7 @@ class _CreateReportPageState extends State<CreateReportPage> {
                           descripcion: _descripcionCtrl.text,
                           tipo: _tipo,
                           prioridad: _prioridad,
-                          fotosPaths: _imageFile != null ? [_imageFile!.path] : [],
+                          fotosPaths: _imagePath != null ? [_imagePath!] : [],
                           createdBy: 'current_user_id',
                           fechaRegistro: DateTime.now(),
                           latitud: 0.0, // Should implement Geolocator, keeping simple for now

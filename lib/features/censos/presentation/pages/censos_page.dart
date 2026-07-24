@@ -55,7 +55,21 @@ class _CensosViewState extends State<CensosView> {
   Widget build(BuildContext context) {
     _notifier = Provider.of<CensosNotifier>(context);
     final authState = context.watch<AuthBloc>().state;
-    final isAuditor = authState is AuthAuthenticated && authState.user.role.toLowerCase() == 'auditor';
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final userRole = (user?.role ?? '').toLowerCase().trim();
+    final username = (user?.username ?? '').toLowerCase().trim();
+
+    final isVisor = userRole.contains('visor') ||
+        userRole.contains('auditor') ||
+        username.contains('visor') ||
+        username.contains('auditor') ||
+        userRole.isEmpty;
+    final isOperador = !isVisor && userRole.contains('operador');
+    final isAdmin = !isVisor && (userRole.contains('admin') || userRole.contains('vocero') || username.contains('admin'));
+
+    final canCreate = !isVisor && (isOperador || isAdmin);
+    final canEdit = !isVisor && (isOperador || isAdmin);
+    final canDelete = isAdmin;
 
     return CustomScaffold(
       scaffoldKey: scaffoldKey,
@@ -93,14 +107,14 @@ class _CensosViewState extends State<CensosView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context, isAuditor),
+              _buildHeader(context, canCreate),
               const SizedBox(height: 20),
-              _buildCensoSelectorSection(context),
+              _buildCensoSelectorSection(context, canDelete),
               const SizedBox(height: 20),
               _buildFilters(context),
               const SizedBox(height: 20),
               if (_notifier!.selectedCenso != null)
-                _buildTable(context, isAuditor)
+                _buildTable(context, canCreate, canEdit, canDelete)
               else
                 const Center(
                     child: Text('Cree un censo para comenzar',
@@ -114,7 +128,7 @@ class _CensosViewState extends State<CensosView> {
 
   // ─── Header ───────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(BuildContext context, bool isAuditor) {
+  Widget _buildHeader(BuildContext context, bool canCreate) {
     final theme = Theme.of(context);
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
@@ -139,8 +153,7 @@ class _CensosViewState extends State<CensosView> {
             ),
           ],
         ),
-        // Botón circular + (solo si no es auditor)
-        if (!isAuditor)
+        if (canCreate)
           Tooltip(
             message: 'Nuevo Censo',
             child: IconButton(
@@ -162,9 +175,11 @@ class _CensosViewState extends State<CensosView> {
 
   // ─── Selector por Tarjetas ──────────────────────────────────────────────────
 
-  Widget _buildCensoSelectorSection(BuildContext context) {
+  Widget _buildCensoSelectorSection(BuildContext context, bool canDelete) {
     final censos = _notifier!.censos;
     if (censos.isEmpty) return const SizedBox.shrink();
+
+    final isAdmin = canDelete;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,7 +194,7 @@ class _CensosViewState extends State<CensosView> {
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 110,
+          height: 115,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: censos.length,
@@ -203,7 +218,7 @@ class _CensosViewState extends State<CensosView> {
                   context.read<CensosBloc>().add(LoadCensoRecords(c.id));
                 },
                 child: Container(
-                  width: 220,
+                  width: 230,
                   margin: const EdgeInsets.only(right: 12),
                   child: Card(
                     color: isSelected ? cardColor : cardColor.withOpacity(0.55),
@@ -234,13 +249,29 @@ class _CensosViewState extends State<CensosView> {
                                   ),
                                 ),
                               ),
-                              if (isSelected)
+                              if (isAdmin)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 18),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => _confirmDeleteCenso(context, c),
+                                    ),
+                                    if (isSelected) ...[
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.check_circle, color: Colors.white, size: 16),
+                                    ]
+                                  ],
+                                )
+                              else if (isSelected)
                                 const Icon(Icons.check_circle, color: Colors.white, size: 18),
                             ],
                           ),
                           const Spacer(),
                           Text(
-                            'Zona: ${c.zona}',
+                            'Sector: ${c.zona}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -337,22 +368,6 @@ class _CensosViewState extends State<CensosView> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // PDF
-                  Tooltip(
-                    message: 'Exportar Censo a PDF',
-                    child: IconButton(
-                      onPressed: _exportToPDF,
-                      icon: const Icon(Icons.picture_as_pdf,
-                          color: Colors.white),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        padding: const EdgeInsets.all(10),
-                        elevation: 2,
-                        shape: const CircleBorder(),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ],
@@ -403,7 +418,7 @@ class _CensosViewState extends State<CensosView> {
 
   // ─── Tabla ────────────────────────────────────────────────────────────────
 
-  Widget _buildTable(BuildContext context, bool isAuditor) {
+  Widget _buildTable(BuildContext context, bool canCreate, bool canEdit, bool canDelete) {
     final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
@@ -433,8 +448,7 @@ class _CensosViewState extends State<CensosView> {
                       fontSize: 18,
                       fontWeight: FontWeight.bold),
                 ),
-                // Botón circular + para agregar registro (solo si no es auditor)
-                if (!isAuditor)
+                if (canCreate)
                   Tooltip(
                     message: 'Agregar Registro',
                     child: IconButton(
@@ -488,17 +502,19 @@ class _CensosViewState extends State<CensosView> {
                   rowsPerPage: 10,
                   showFirstLastButtons: true,
                   columns: [
+                    const DataColumn(label: Text('Nº')),
                     const DataColumn(label: Text('Jefe de Familia')),
                     const DataColumn(label: Text('Cédula')),
                     const DataColumn(label: Text('Dirección')),
-                    if (!isAuditor) const DataColumn(label: Text('Acciones')),
+                    if (canEdit || canDelete) const DataColumn(label: Text('Acciones')),
                   ],
                   source: FamilyRecordsDataTableSource(
                     records: _notifier!.filteredRecords,
                     context: context,
                     onEdit: (r) => _showRecordModal(record: r),
                     onDelete: (r) => _confirmDelete(r),
-                    isAuditor: isAuditor,
+                    canEdit: canEdit,
+                    canDelete: canDelete,
                   ),
                 ),
               ),
@@ -729,13 +745,24 @@ class _CensosViewState extends State<CensosView> {
 
   void _showRecordModal({CensoRecord? record}) {
     final bloc = context.read<CensosBloc>();
+    final habitantsBloc = context.read<HabitantsBloc>();
+    final habitantsState = habitantsBloc.state;
+    debugPrint('CensosPage: _showRecordModal - habitantsState is $habitantsState');
+    final allHabitants = habitantsState is HabitantsLoaded ? habitantsState.habitants : <Habitante>[];
+    debugPrint('CensosPage: _showRecordModal - allHabitants count: ${allHabitants.length}');
+
     showDialog(
       context: context,
-      builder: (_) => BlocProvider.value(
-        value: bloc,
+      builder: (_) => MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: bloc),
+          BlocProvider.value(value: habitantsBloc),
+        ],
         child: CensoRecordFormModal(
           censo: _notifier!.selectedCenso!,
           record: record,
+          nextNumEncuesta: _notifier!.records.length + 1,
+          allHabitants: allHabitants,
         ),
       ),
     );
@@ -776,6 +803,41 @@ class _CensosViewState extends State<CensosView> {
             },
             child: const Text('Eliminar',
                 style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteCenso(BuildContext context, Censo censo) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.white,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Eliminar Censo', style: TextStyle(color: Colors.black87)),
+          ],
+        ),
+        content: Text(
+          '¿Está seguro de eliminar el censo "${censo.nombre}" y todos sus registros de forma permanente?',
+          style: const TextStyle(color: Colors.black54),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              context.read<CensosBloc>().add(DeleteCensoEvent(id: censo.id, nombre: censo.nombre));
+              Navigator.pop(dialogCtx);
+            },
+            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

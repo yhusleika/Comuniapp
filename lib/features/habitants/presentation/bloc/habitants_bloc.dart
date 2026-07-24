@@ -74,7 +74,7 @@ class HabitantsBloc extends Bloc<HabitantsEvent, HabitantsState> {
       (failure) => emit(HabitantsError(failure.message)),
       (_) {
         emit(HabitanteOperationSuccess());
-        sl<AuditLoggerService>().log('Eliminó un habitante con ID "${event.id}"');
+        sl<AuditLoggerService>().log('Eliminó a un habitante del sistema');
         add(const LoadHabitants());
       },
     );

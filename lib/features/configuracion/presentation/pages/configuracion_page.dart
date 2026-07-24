@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive/hive.dart';
-import '../../../../core/theme/theme_cubit.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
+import '../../../../core/network/network_info.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/mongodb_service.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class ConfiguracionPage extends StatefulWidget {
   const ConfiguracionPage({super.key});
@@ -16,26 +19,164 @@ class _ConfiguracionPageState extends State<ConfiguracionPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _syncNotifications = true;
 
-  Future<void> _clearCredentialsCache() async {
+  // Real-time DB sync status
+  String _syncStatusText = 'Sincronizado con la nube';
+  Color _syncStatusColor = Colors.green;
+  IconData _syncStatusIcon = Icons.cloud_done_outlined;
+  bool _isCheckingSync = false;
+
+  // Controllers for password change inside System Settings
+  final _securityKey = GlobalKey<FormState>();
+  final _currentPassController = TextEditingController();
+  final _newPassController = TextEditingController();
+  final _confirmPassController = TextEditingController();
+  bool _showPasswordFields = false;
+  bool _isPasswordButtonEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPassController.addListener(_validatePasswordFields);
+    _newPassController.addListener(_validatePasswordFields);
+    _confirmPassController.addListener(_validatePasswordFields);
+    _checkNetworkSyncStatus();
+  }
+
+  @override
+  void dispose() {
+    _currentPassController.dispose();
+    _newPassController.dispose();
+    _confirmPassController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkNetworkSyncStatus() async {
+    setState(() {
+      _isCheckingSync = true;
+      _syncStatusText = 'Sincronizando con la nube...';
+      _syncStatusColor = Colors.orange;
+      _syncStatusIcon = Icons.sync;
+    });
+
     try {
-      final box = await Hive.openBox('recovered_credentials');
-      await box.clear();
+      final networkInfo = sl<NetworkInfo>();
+      final isConnected = await networkInfo.isConnected;
+      await Future.delayed(const Duration(milliseconds: 600));
+
       if (mounted) {
+        setState(() {
+          _isCheckingSync = false;
+          if (isConnected) {
+            _syncStatusText = 'Sincronizado con la nube';
+            _syncStatusColor = Colors.green;
+            _syncStatusIcon = Icons.cloud_done_outlined;
+          } else {
+            _syncStatusText = 'Modo offline';
+            _syncStatusColor = Colors.deepOrange;
+            _syncStatusIcon = Icons.cloud_off_outlined;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isCheckingSync = false;
+          _syncStatusText = 'Modo offline';
+          _syncStatusColor = Colors.deepOrange;
+          _syncStatusIcon = Icons.cloud_off_outlined;
+        });
+      }
+    }
+  }
+
+  void _validatePasswordFields() {
+    final current = _currentPassController.text;
+    final newPass = _newPassController.text;
+    final confirm = _confirmPassController.text;
+
+    setState(() {
+      _isPasswordButtonEnabled = current.isNotEmpty &&
+          newPass.isNotEmpty &&
+          confirm.isNotEmpty &&
+          newPass == confirm;
+    });
+  }
+
+  Future<void> _updatePassword() async {
+    if (_securityKey.currentState!.validate()) {
+      // Get the current user info
+      final authState = context.read<AuthBloc>().state;
+      if (authState is! AuthAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Caché de credenciales recuperadas limpiado con éxito.'),
-            backgroundColor: Colors.green,
+            content: Text('Error: no hay sesión activa'),
+            backgroundColor: Colors.red,
           ),
         );
+        return;
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al limpiar caché: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+
+      final currentUser = authState.user;
+      final currentPass = _currentPassController.text;
+      final newPass = _newPassController.text;
+
+      // Verify current password locally first
+      final recoveredBox = await Hive.openBox('recovered_credentials');
+      final storedPass = recoveredBox.get(currentUser.username);
+
+      if (storedPass != null && storedPass != currentPass) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('La contraseña actual es incorrecta'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      try {
+        // Update password in the backend
+        final mongo = sl<MongoDBService>();
+        bool success = false;
+        try {
+          final response = await mongo.dio.put('/users/profile', data: {
+            'username': currentUser.username,
+            'password': newPass,
+          });
+          success = response.statusCode == 200;
+        } catch (_) {}
+
+        // Also update locally in Hive
+        await recoveredBox.put(currentUser.username, newPass);
+
+        _currentPassController.clear();
+        _newPassController.clear();
+        _confirmPassController.clear();
+        setState(() {
+          _showPasswordFields = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(success
+                  ? 'Contraseña actualizada exitosamente'
+                  : 'Contraseña actualizada localmente (sin conexión al servidor)'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al actualizar contraseña: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -43,7 +184,6 @@ class _ConfiguracionPageState extends State<ConfiguracionPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return CustomScaffold(
       scaffoldKey: scaffoldKey,
@@ -58,7 +198,7 @@ class _ConfiguracionPageState extends State<ConfiguracionPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Configuración del Sistema',
+                  'Configuración de Sistema',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -68,24 +208,24 @@ class _ConfiguracionPageState extends State<ConfiguracionPage> {
                 ),
                 SizedBox(height: 6),
                 Text(
-                  'Personalice las preferencias de visualización y sincronización',
+                  'Gestiona el estado de sincronización y la seguridad de tu cuenta',
                   style: TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
 
-            // Card Container
+            // DB Sync Card Container
             Container(
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.08)),
-                boxShadow: [
+                border: Border.all(color: Colors.black.withOpacity(0.08)),
+                boxShadow: const [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black12,
                     blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
@@ -94,21 +234,22 @@ class _ConfiguracionPageState extends State<ConfiguracionPage> {
                   // Notifications Switch
                   SwitchListTile(
                     value: _syncNotifications,
+                    activeColor: theme.colorScheme.primary,
                     onChanged: (val) {
                       setState(() {
                         _syncNotifications = val;
                       });
                     },
-                    title: Text(
+                    title: const Text(
                       'Notificaciones de Sincronización',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: Colors.black87,
                       ),
                     ),
-                    subtitle: Text(
+                    subtitle: const Text(
                       'Alertar al completarse la sincronización en segundo plano',
-                      style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                      style: TextStyle(color: Colors.black54),
                     ),
                     secondary: Container(
                       padding: const EdgeInsets.all(8),
@@ -124,108 +265,189 @@ class _ConfiguracionPageState extends State<ConfiguracionPage> {
                   ),
                   const Divider(height: 1),
 
-                  // API Endpoint Status
+                  // Real-Time DB Sync Status ListTile
                   ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.15),
+                        color: _syncStatusColor.withOpacity(0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.cloud_done_outlined,
-                        color: Colors.green,
+                      child: Icon(
+                        _syncStatusIcon,
+                        color: _syncStatusColor,
                       ),
                     ),
-                    title: Text(
+                    title: const Text(
                       'Estado de la Base de Datos',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: Colors.black87,
                       ),
                     ),
-                    subtitle: const Text(
-                      'MongoDB Atlas REST API - Simulado En Línea',
-                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
+                    subtitle: Text(
+                      _syncStatusText,
+                      style: TextStyle(color: _syncStatusColor, fontWeight: FontWeight.w600),
                     ),
-                    trailing: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: const BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
+                    trailing: _isCheckingSync
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.refresh, color: Colors.black54),
+                            onPressed: _checkNetworkSyncStatus,
+                            tooltip: 'Comprobar sincronización',
+                          ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
 
-            // Advanced Preference section
-            Text(
-              'Avanzado',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white70 : Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 12),
-
+            // Embedded Password Change Section
             Container(
-              width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.08)),
-                boxShadow: [
+                border: Border.all(color: Colors.black.withOpacity(0.08)),
+                boxShadow: const [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black12,
                     blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Seguridad y Caché Local',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
+              child: Form(
+                key: _securityKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF416FDF).withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.lock_outline, color: Color(0xFF416FDF)),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Seguridad de la Cuenta',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _showPasswordFields = !_showPasswordFields;
+                            });
+                          },
+                          icon: Icon(_showPasswordFields ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
+                          label: Text(_showPasswordFields ? 'Ocultar' : 'Cambiar Contraseña'),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Si restableció contraseñas localmente, puede limpiar la base de datos local temporal para restaurar los valores iniciales por defecto.',
-                    style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black54, height: 1.3),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: const BorderSide(color: Colors.redAccent),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: _clearCredentialsCache,
-                      icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
-                      label: const Text(
-                        'Limpiar Caché de Credenciales',
-                        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
-                      ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child: _showPasswordFields
+                          ? Column(
+                              children: [
+                                const SizedBox(height: 16),
+                                _buildPasswordField(
+                                  label: 'Contraseña Actual',
+                                  controller: _currentPassController,
+                                  icon: Icons.lock_outline,
+                                ),
+                                _buildPasswordField(
+                                  label: 'Nueva Contraseña',
+                                  controller: _newPassController,
+                                  icon: Icons.lock_reset_outlined,
+                                ),
+                                _buildPasswordField(
+                                  label: 'Confirmar Contraseña',
+                                  controller: _confirmPassController,
+                                  icon: Icons.lock_clock_outlined,
+                                  validator: (value) {
+                                    if (value != _newPassController.text) {
+                                      return 'Las contraseñas no coinciden';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 46,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF416FDF),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    onPressed: _isPasswordButtonEnabled ? _updatePassword : null,
+                                    child: const Text('Actualizar Contraseña', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required String label,
+    required TextEditingController controller,
+    required IconData icon,
+    FormFieldValidator<String>? validator,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextFormField(
+        controller: controller,
+        obscureText: true,
+        style: const TextStyle(color: Colors.black87),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: const Color(0xFF416FDF)),
+          labelStyle: const TextStyle(color: Colors.black54),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Colors.black12),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF416FDF)),
+          ),
+          fillColor: Colors.grey.shade50,
+          filled: true,
+        ),
+        validator: validator ??
+            (value) {
+              if (value == null || value.isEmpty) {
+                return 'Este campo es obligatorio';
+              }
+              return null;
+            },
       ),
     );
   }

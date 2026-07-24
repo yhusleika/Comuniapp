@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../../core/utils/file_saver.dart';
@@ -18,6 +18,7 @@ import '../../domain/entities/ayuda_type.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 import '../widgets/ayuda_form_modal.dart';
+import '../widgets/assign_ayuda_modal.dart';
 
 class AyudasPage extends StatelessWidget {
   const AyudasPage({super.key});
@@ -50,7 +51,21 @@ class _AyudasViewState extends State<AyudasView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
-    final isAuditor = authState is AuthAuthenticated && authState.user.role.toLowerCase() == 'auditor';
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final userRole = (user?.role ?? '').toLowerCase().trim();
+    final username = (user?.username ?? '').toLowerCase().trim();
+
+    final isVisor = userRole.contains('visor') ||
+        userRole.contains('auditor') ||
+        username.contains('visor') ||
+        username.contains('auditor') ||
+        userRole.isEmpty;
+    final isOperador = !isVisor && userRole.contains('operador');
+    final isAdmin = !isVisor && (userRole.contains('admin') || userRole.contains('vocero') || username.contains('admin'));
+
+    final canCreate = !isVisor && (isOperador || isAdmin);
+    final canEdit = !isVisor && (isOperador || isAdmin);
+    final canDelete = isAdmin;
 
     return CustomScaffold(
       scaffoldKey: scaffoldKey,
@@ -101,9 +116,9 @@ class _AyudasViewState extends State<AyudasView> {
                 if (ayudasState is AyudasLoaded &&
                     habitantsState is HabitantsLoaded) {
                   _notifier ??= AyudasNotifier(
-                      habitantsState.habitants, ayudasState.ayudaTypes, isAuditor: isAuditor);
+                      habitantsState.habitants, ayudasState.ayudaTypes, isAuditor: isVisor);
                   _notifier!.updateData(
-                      habitantsState.habitants, ayudasState.ayudaTypes);
+                      habitantsState.habitants, ayudasState.ayudaTypes, isAuditor: isVisor);
 
                   return ListenableBuilder(
                     listenable: _notifier!,
@@ -112,11 +127,11 @@ class _AyudasViewState extends State<AyudasView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildHeader(theme, isAuditor),
+                          _buildHeader(theme, canCreate),
                           const SizedBox(height: 20),
-                          _buildAidTypesSection(theme, ayudasState.ayudaTypes, isAuditor),
+                          _buildAidTypesSection(theme, ayudasState.ayudaTypes, canEdit, canDelete),
                           const SizedBox(height: 30),
-                          _buildBeneficiariesSection(theme, isAuditor),
+                          _buildBeneficiariesSection(theme, canEdit),
                         ],
                       ),
                     ),
@@ -142,7 +157,7 @@ class _AyudasViewState extends State<AyudasView> {
     }
   }
 
-  Widget _buildHeader(ThemeData theme, bool isAuditor) {
+  Widget _buildHeader(ThemeData theme, bool canCreate) {
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -154,24 +169,40 @@ class _AyudasViewState extends State<AyudasView> {
           style: theme.textTheme.headlineMedium
               ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        if (!isAuditor)
-          IconButton(
-            onPressed: () => _showAyudaTypeModal(),
-            icon: const Icon(Icons.add, size: 24),
-            style: IconButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.all(12),
-              elevation: 3,
-              shadowColor: Colors.black38,
-              shape: const CircleBorder(),
-            ),
+        if (canCreate)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _showAyudaTypeModal(),
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('Crear ayuda'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () => _showAssignAyudaModal(),
+                icon: const Icon(Icons.assignment_ind, size: 20),
+                label: const Text('Asignar Ayuda'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF50E3C2),
+                  foregroundColor: Colors.black87,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
           ),
       ],
     );
   }
 
-  Widget _buildAidTypesSection(ThemeData theme, List<AyudaType> types, bool isAuditor) {
+  Widget _buildAidTypesSection(ThemeData theme, List<AyudaType> types, bool canEdit, bool canDelete) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -188,45 +219,50 @@ class _AyudasViewState extends State<AyudasView> {
               return Container(
                 width: 200,
                 margin: const EdgeInsets.only(right: 12),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                                child: Text(type.nombre,
-                                    style: const TextStyle(
-                                         fontWeight: FontWeight.bold,
-                                         fontSize: 16))),
-                            if (!isAuditor)
-                              PopupMenuButton<String>(
-                                onSelected: (value) {
-                                  if (value == 'edit') {
-                                    _showAyudaTypeModal(ayudaType: type);
-                                  }
-                                  if (value == 'delete') {
-                                    _confirmDeleteAidType(type.id);
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  const PopupMenuItem(
-                                      value: 'edit', child: Text('Editar')),
-                                  const PopupMenuItem(
-                                      value: 'delete', child: Text('Eliminar')),
-                                ],
-                                icon: const Icon(Icons.more_vert, size: 20),
-                              ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text('Resp: ${type.responsable}',
-                            style: TextStyle(
-                                color: Colors.grey[600], fontSize: 12)),
-                      ],
+                child: GestureDetector(
+                  onTap: () => _showAyudaTypeDetails(context, type),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                  child: Text(type.nombre,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16))),
+                              if (canEdit || canDelete)
+                                PopupMenuButton<String>(
+                                  onSelected: (value) {
+                                    if (value == 'edit') {
+                                      _showAyudaTypeModal(ayudaType: type);
+                                    }
+                                    if (value == 'delete') {
+                                      _confirmDeleteAidType(type.id);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    if (canEdit)
+                                      const PopupMenuItem(
+                                          value: 'edit', child: Text('Editar')),
+                                    if (canDelete)
+                                      const PopupMenuItem(
+                                          value: 'delete', child: Text('Eliminar')),
+                                  ],
+                                  icon: const Icon(Icons.more_vert, size: 20),
+                                ),
+                            ],
+                          ),
+                          const Spacer(),
+                          Text('Resp: ${type.responsable}',
+                              style: TextStyle(
+                                  color: Colors.grey[600], fontSize: 12)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -238,7 +274,7 @@ class _AyudasViewState extends State<AyudasView> {
     );
   }
 
-  Widget _buildBeneficiariesSection(ThemeData theme, bool isAuditor) {
+  Widget _buildBeneficiariesSection(ThemeData theme, bool canEdit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -316,7 +352,7 @@ class _AyudasViewState extends State<AyudasView> {
                   const DataColumn(label: Text('Cédula')),
                   const DataColumn(label: Text('Ayuda')),
                   const DataColumn(label: Text('Fecha')),
-                  if (!isAuditor) const DataColumn(label: Text('Editar')),
+                  if (canEdit) const DataColumn(label: Text('Editar')),
                 ],
                 source: _notifier!.dataSource..onEdit = _showBeneficiaryEditModal,
               ),
@@ -431,17 +467,17 @@ class _AyudasViewState extends State<AyudasView> {
   void _confirmDeleteAidType(String id) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Eliminar Tipo de Ayuda'),
         content: const Text('¿Está seguro de eliminar este tipo de ayuda?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: const Text('Cancelar')),
           ElevatedButton(
             onPressed: () {
               context.read<AyudasBloc>().add(DeleteAyudaTypeEvent(id));
-              Navigator.pop(context);
+              Navigator.pop(dialogCtx);
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
@@ -453,106 +489,283 @@ class _AyudasViewState extends State<AyudasView> {
   }
 
   void _showAyudaTypeModal({AyudaType? ayudaType}) {
-    final habitantsState = context.read<HabitantsBloc>().state;
-    final List<Habitante> allHabitants = habitantsState is HabitantsLoaded
-        ? habitantsState.habitants
-        : [];
-
     showDialog(
       context: context,
       builder: (dialogCtx) => AyudaFormModal(
-        allHabitants: allHabitants,
         ayudaType: ayudaType,
-        onSave: (newType, selectedHabitants) {
+        onSave: (newType) {
           if (ayudaType != null) {
             context.read<AyudasBloc>().add(UpdateAyudaTypeEvent(newType));
           } else {
             context.read<AyudasBloc>().add(CreateAyudaType(newType));
           }
-
-          for (var h in selectedHabitants) {
-            final updatedH = Habitante(
-              id: h.id,
-              cedula: h.cedula,
-              nombres: h.nombres,
-              apellidos: h.apellidos,
-              telefono: h.telefono,
-              sector: h.sector,
-              ayudaRecibida: newType.nombre,
-              puntoReferencia: h.puntoReferencia,
-              tieneDiscapacidad: h.tieneDiscapacidad,
-              tieneEnfermedadCronica: h.tieneEnfermedadCronica,
-              condicionVivienda: h.condicionVivienda,
-              tipoVivienda: h.tipoVivienda,
-              registeredBy: h.registeredBy,
-              fechaRegistro: h.fechaRegistro,
-              detallesDiscapacidad: h.detallesDiscapacidad,
-              detallesEnfermedad: h.detallesEnfermedad,
-            );
-            context.read<HabitantsBloc>().add(UpdateHabitanteEvent(updatedH));
-          }
-
           Navigator.pop(dialogCtx);
         },
       ),
     );
   }
 
-  void _showBeneficiaryEditModal(Habitante habitante) {
-    String selectedAid = habitante.ayudaRecibida;
-    final types = _notifier!.ayudaTypes.map((t) => t.nombre).toList();
-    if (!types.contains('Ninguna')) types.add('Ninguna');
+  void _showAssignAyudaModal() {
+    final habitantsState = context.read<HabitantsBloc>().state;
+    final List<Habitante> allHabitants = habitantsState is HabitantsLoaded
+        ? habitantsState.habitants
+        : [];
+    final ayudasState = context.read<AyudasBloc>().state;
+    final List<AyudaType> ayudaTypes = ayudasState is AyudasLoaded
+        ? ayudasState.ayudaTypes
+        : [];
+
+    if (ayudaTypes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debe registrar al menos un tipo de ayuda primero')),
+      );
+      return;
+    }
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Editar Ayuda: ${habitante.nombres}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Cambie el tipo de ayuda asignada:'),
-            const SizedBox(height: 15),
-            DropdownButtonFormField<String>(
-              value: types.contains(selectedAid) ? selectedAid : types.first,
-              items: types
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                  .toList(),
-              onChanged: (v) => selectedAid = v!,
-              decoration: const InputDecoration(
-                  border: OutlineInputBorder(), labelText: 'Ayuda'),
+      builder: (dialogCtx) => AssignAyudaModal(
+        allHabitants: allHabitants,
+        ayudaTypes: ayudaTypes,
+        onAssign: (selectedHabitantes, ayudaType, descripcion) {
+          for (final habitante in selectedHabitantes) {
+            final String currentAids = habitante.ayudaRecibida.trim();
+            final List<String> aidsList = currentAids.isEmpty || currentAids.toLowerCase() == 'ninguna'
+                ? []
+                : currentAids.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            
+            if (!aidsList.contains(ayudaType.nombre)) {
+              aidsList.add(ayudaType.nombre);
+            }
+            final String finalAids = aidsList.join(', ');
+
+            final updatedH = Habitante(
+              id: habitante.id,
+              cedula: habitante.cedula,
+              nombres: habitante.nombres,
+              apellidos: habitante.apellidos,
+              telefono: habitante.telefono,
+              sector: habitante.sector,
+              ayudaRecibida: finalAids,
+              puntoReferencia: habitante.puntoReferencia,
+              tieneDiscapacidad: habitante.tieneDiscapacidad,
+              tieneEnfermedadCronica: habitante.tieneEnfermedadCronica,
+              condicionVivienda: habitante.condicionVivienda,
+              tipoVivienda: habitante.tipoVivienda,
+              registeredBy: habitante.registeredBy,
+              fechaRegistro: habitante.fechaRegistro,
+              detallesDiscapacidad: habitante.detallesDiscapacidad,
+              detallesEnfermedad: habitante.detallesEnfermedad,
+            );
+            context.read<HabitantsBloc>().add(UpdateHabitanteEvent(updatedH));
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ayuda "${ayudaType.nombre}" asignada a ${selectedHabitantes.length} habitante(s).'),
+              backgroundColor: Colors.green,
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showAyudaTypeDetails(BuildContext context, AyudaType type) {
+    final habitantsState = context.read<HabitantsBloc>().state;
+    final List<Habitante> beneficiaries = habitantsState is HabitantsLoaded
+        ? habitantsState.habitants.where((h) {
+            final aids = h.ayudaRecibida.split(',').map((e) => e.trim()).toList();
+            return aids.contains(type.nombre);
+          }).toList()
+        : [];
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Color(0xFF416FDF)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(type.nombre)),
           ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Descripción:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                type.descripcion.isNotEmpty ? type.descripcion : 'Sin descripción disponible.',
+                style: const TextStyle(color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Responsable: ${type.responsable}',
+                style: TextStyle(color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+              ),
+              const Divider(height: 24),
+              Text(
+                'Beneficiarios Asignados (${beneficiaries.length}):',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              if (beneficiaries.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    'No hay beneficiarios asignados a este tipo de ayuda.',
+                    style: TextStyle(color: Colors.black38, fontStyle: FontStyle.italic),
+                  ),
+                )
+              else
+                Flexible(
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: beneficiaries.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, idx) {
+                        final b = beneficiaries[idx];
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            '${b.nombres} ${b.apellidos}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text('Cédula: ${b.cedula}'),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () {
-              final updatedH = Habitante(
-                id: habitante.id,
-                cedula: habitante.cedula,
-                nombres: habitante.nombres,
-                apellidos: habitante.apellidos,
-                telefono: habitante.telefono,
-                sector: habitante.sector,
-                ayudaRecibida: selectedAid,
-                puntoReferencia: habitante.puntoReferencia,
-                tieneDiscapacidad: habitante.tieneDiscapacidad,
-                tieneEnfermedadCronica: habitante.tieneEnfermedadCronica,
-                condicionVivienda: habitante.condicionVivienda,
-                tipoVivienda: habitante.tipoVivienda,
-                registeredBy: habitante.registeredBy,
-                fechaRegistro: habitante.fechaRegistro,
-                detallesDiscapacidad: habitante.detallesDiscapacidad,
-                detallesEnfermedad: habitante.detallesEnfermedad,
-              );
-              context.read<HabitantsBloc>().add(UpdateHabitanteEvent(updatedH));
-              Navigator.pop(context);
-            },
-            child: const Text('Actualizar'),
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cerrar'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showBeneficiaryEditModal(Habitante habitante) {
+    final types = _notifier!.ayudaTypes.map((t) => t.nombre).toList();
+    final currentAids = habitante.ayudaRecibida
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e.toLowerCase() != 'ninguna')
+        .toList();
+    
+    List<String> selectedAids = List<String>.from(currentAids);
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Editar Ayudas: ${habitante.nombres} ${habitante.apellidos}', style: const TextStyle(color: Colors.black87)),
+            content: SizedBox(
+              width: 350,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Seleccione las ayudas asignadas:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 10),
+                    if (types.isEmpty)
+                      const Text('No hay tipos de ayudas configuradas.', style: TextStyle(color: Colors.black54))
+                    else
+                      ...types.map((type) {
+                        final isSelected = selectedAids.contains(type);
+                        return CheckboxListTile(
+                          activeColor: const Color(0xFF416FDF),
+                          title: Text(type, style: const TextStyle(color: Colors.black87)),
+                          value: isSelected,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                selectedAids.add(type);
+                              } else {
+                                selectedAids.remove(type);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    const Divider(),
+                    CheckboxListTile(
+                      activeColor: Colors.red,
+                      title: const Text('Ninguna (Limpiar todo)', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      value: selectedAids.isEmpty,
+                      onChanged: (val) {
+                        if (val == true) {
+                          setDialogState(() {
+                            selectedAids.clear();
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF416FDF),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  final String finalAids = selectedAids.isEmpty ? 'Ninguna' : selectedAids.join(', ');
+                  final updatedH = Habitante(
+                    id: habitante.id,
+                    cedula: habitante.cedula,
+                    nombres: habitante.nombres,
+                    apellidos: habitante.apellidos,
+                    telefono: habitante.telefono,
+                    sector: habitante.sector,
+                    ayudaRecibida: finalAids,
+                    puntoReferencia: habitante.puntoReferencia,
+                    tieneDiscapacidad: habitante.tieneDiscapacidad,
+                    tieneEnfermedadCronica: habitante.tieneEnfermedadCronica,
+                    condicionVivienda: habitante.condicionVivienda,
+                    tipoVivienda: habitante.tipoVivienda,
+                    registeredBy: habitante.registeredBy,
+                    fechaRegistro: habitante.fechaRegistro,
+                    detallesDiscapacidad: habitante.detallesDiscapacidad,
+                    detallesEnfermedad: habitante.detallesEnfermedad,
+                  );
+                  context.read<HabitantsBloc>().add(UpdateHabitanteEvent(updatedH));
+                  Navigator.pop(context);
+                },
+                child: const Text('Actualizar'),
+              ),
+            ],
+          );
+        }
       ),
     );
   }

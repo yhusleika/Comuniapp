@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../core/utils/user_roles_helper.dart';
 import '../../domain/models/management_models.dart';
 import '../../../habitants/domain/entities/habitante.dart';
+import '../../../habitants/presentation/widgets/search_habitante_modal.dart';
+import '../../../habitants/presentation/bloc/habitants_bloc.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ManagementFormModal extends StatefulWidget {
   final ManagementItem? item;
@@ -38,13 +43,7 @@ class _ManagementFormModalState extends State<ManagementFormModal> {
   late DateTime _selectedDate;
   final List<String> _photos = [];
 
-  final List<String> _responsibles = [
-    'Juan Pérez',
-    'Ana López',
-    'Carlos Ruiz',
-    'María Rodríguez',
-    'Luisa Hernández',
-  ];
+  List<String> _responsibles = UserRolesHelper.getOperadores();
 
   final List<Habitante> _selectedHabitants = [];
   List<Habitante> _searchResults = [];
@@ -61,9 +60,16 @@ class _ManagementFormModalState extends State<ManagementFormModal> {
       text: DateFormat('yyyy-MM-dd').format(_selectedDate),
     );
 
-    _selectedResponsible = widget.item != null && _responsibles.contains(widget.item!.responsible)
-        ? widget.item!.responsible
-        : _responsibles.first;
+    if (widget.item != null && widget.item!.responsible.isNotEmpty) {
+      if (!_responsibles.contains(widget.item!.responsible)) {
+        _responsibles.insert(0, widget.item!.responsible);
+      }
+      _selectedResponsible = widget.item!.responsible;
+    } else {
+      _selectedResponsible = _responsibles.isNotEmpty ? _responsibles.first : '';
+    }
+
+    _loadOperadores();
 
     _selectedStatus = widget.item?.status ?? 'Pendiente';
     _progressValue = widget.item?.progress ?? 0.0;
@@ -93,6 +99,22 @@ class _ManagementFormModalState extends State<ManagementFormModal> {
         _selectedHabitants.add(match);
       }
     }
+  }
+
+  Future<void> _loadOperadores() async {
+    final ops = await UserRolesHelper.fetchOperadoresAsync();
+    if (!mounted) return;
+    setState(() {
+      _responsibles = ops;
+      if (widget.item != null && widget.item!.responsible.isNotEmpty) {
+        if (!_responsibles.contains(widget.item!.responsible)) {
+          _responsibles.insert(0, widget.item!.responsible);
+        }
+        _selectedResponsible = widget.item!.responsible;
+      } else if (_selectedResponsible == null || !_responsibles.contains(_selectedResponsible)) {
+        _selectedResponsible = _responsibles.isNotEmpty ? _responsibles.first : '';
+      }
+    });
   }
 
   @override
@@ -454,51 +476,36 @@ class _ManagementFormModalState extends State<ManagementFormModal> {
                       ),
                       const SizedBox(height: 8),
                       TextField(
-                        controller: _searchController,
-                        onChanged: _searchHabitants,
+                        readOnly: true,
+                        onTap: () async {
+                          final hState = context.read<HabitantsBloc>().state;
+                          final hList = hState is HabitantsLoaded ? hState.habitants : widget.allHabitants;
+                          final selected = await SearchHabitanteModal.show(
+                            context: context,
+                            allHabitants: hList,
+                            multiSelect: true,
+                            alreadySelected: _selectedHabitants,
+                            onRegisterNew: () {
+                              context.push('/habitants');
+                            },
+                          );
+                          if (selected != null) {
+                            setState(() {
+                              _selectedHabitants.clear();
+                              _selectedHabitants.addAll(selected);
+                            });
+                          }
+                        },
                         style: const TextStyle(color: Colors.black87),
                         decoration: InputDecoration(
-                          hintText: 'Buscar por nombre o cédula...',
+                          hintText: 'Buscar asistentes...',
                           hintStyle: const TextStyle(color: Colors.black38),
-                          prefixIcon: const Icon(Icons.search, color: Color(0xFF416FDF)),
+                          prefixIcon: const Icon(Icons.person_search, color: Color(0xFF416FDF)),
                           filled: true,
                           fillColor: Colors.grey.shade50,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
-
-                      // Resultados de la búsqueda
-                      if (_searchResults.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          constraints: const BoxConstraints(maxHeight: 150),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: _searchResults.length,
-                            itemBuilder: (context, index) {
-                              final h = _searchResults[index];
-                              return ListTile(
-                                dense: true,
-                                title: Text('${h.nombres} ${h.apellidos}', style: const TextStyle(color: Colors.black87)),
-                                subtitle: Text('Cédula: ${h.cedula}', style: const TextStyle(color: Colors.black54)),
-                                trailing: const Icon(Icons.add_circle_outline, color: Color(0xFF416FDF)),
-                                onTap: () {
-                                  setState(() {
-                                    _selectedHabitants.add(h);
-                                    _searchController.clear();
-                                    _searchResults = [];
-                                  });
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
 
                       const SizedBox(height: 16),
 

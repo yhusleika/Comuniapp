@@ -21,11 +21,11 @@ class _SideMenuState extends State<SideMenu> {
   Widget build(BuildContext context) {
     final hasNotch = MediaQuery.of(context).viewPadding.top > 35;
     final authState = context.watch<AuthBloc>().state;
-    final String userRole = authState is AuthAuthenticated ? authState.user.role.toLowerCase() : 'operador';
+    final String userRole = authState is AuthAuthenticated ? authState.user.role.toLowerCase().trim() : 'visor';
 
     final filteredMenuItems = appMenuItems.where((item) {
       if (item.link == '/administracion') {
-        return userRole == 'admin';
+        return userRole.contains('admin');
       }
       return true;
     }).toList();

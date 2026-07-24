@@ -4,8 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../features/auth/presentation/pages/login_page.dart';
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../../features/habitants/presentation/pages/habitants_page.dart';
+import '../../../features/habitants/presentation/bloc/habitants_bloc.dart';
+import '../di/injection_container.dart';
 import '../../../features/reports/presentation/pages/reports_page.dart';
-import '../../../features/profile/presentation/pages/profile_page.dart';
 import '../../../features/street_info/presentation/pages/street_info_page.dart';
 import '../../../features/ayudas/presentation/pages/ayudas_page.dart';
 import '../../../features/censos/presentation/pages/censos_page.dart';
@@ -46,10 +47,6 @@ GoRouter createAppRouter(AuthNotifier authNotifier) {
         builder: (context, state) => const ReportsPage(),
       ),
       GoRoute(
-        path: '/profile',
-        builder: (context, state) => const ProfilePage(),
-      ),
-      GoRoute(
         path: '/ayudas',
         builder: (context, state) => const AyudasPage(),
       ),
@@ -75,7 +72,10 @@ GoRouter createAppRouter(AuthNotifier authNotifier) {
       ),
       GoRoute(
         path: '/administracion',
-        builder: (context, state) => const AdministracionGeneralPage(),
+        builder: (context, state) => BlocProvider(
+          create: (context) => sl<HabitantsBloc>()..add(const LoadHabitants()),
+          child: const AdministracionGeneralPage(),
+        ),
       ),
       GoRoute(
         path: '/auditoria',
@@ -115,8 +115,8 @@ GoRouter createAppRouter(AuthNotifier authNotifier) {
 
       // Check role restrictions
       final userRole = authState.user.role.toLowerCase();
-      if (state.matchedLocation == '/administracion' && userRole != 'admin') {
-        print(' - Result: /dashboard (role restricted: $userRole cannot access /administracion)');
+      if (state.matchedLocation == '/administracion' && !userRole.contains('admin')) {
+        print(' - Result: /dashboard (role restricted: $userRole cannot access ${state.matchedLocation})');
         return '/dashboard';
       }
 

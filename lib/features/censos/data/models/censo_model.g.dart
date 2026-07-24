@@ -24,13 +24,14 @@ class CensoModelAdapter extends TypeAdapter<CensoModel> {
       fecha: fields[4] as DateTime,
       camposSeleccionados:
           fields[5] == null ? [] : (fields[5] as List).cast<String>(),
+      isSynced: fields[6] == null ? false : fields[6] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, CensoModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -42,7 +43,9 @@ class CensoModelAdapter extends TypeAdapter<CensoModel> {
       ..writeByte(4)
       ..write(obj.fecha)
       ..writeByte(5)
-      ..write(obj.camposSeleccionados);
+      ..write(obj.camposSeleccionados)
+      ..writeByte(6)
+      ..write(obj.isSynced);
   }
 
   @override

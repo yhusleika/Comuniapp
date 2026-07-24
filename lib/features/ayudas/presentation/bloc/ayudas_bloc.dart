@@ -70,7 +70,7 @@ class AyudasBloc extends Bloc<AyudasEvent, AyudasState> {
       (failure) => emit(AyudasError(failure.message)),
       (_) {
         emit(AyudaOperationSuccess());
-        sl<AuditLoggerService>().log('Eliminó una ayuda social con ID "${event.id}"');
+        sl<AuditLoggerService>().log('Eliminó una ayuda social del sistema');
         add(LoadAyudaTypes());
       },
     );

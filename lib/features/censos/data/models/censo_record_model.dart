@@ -37,6 +37,14 @@ class CensoRecordModel extends CensoRecord {
   @override
   final Map<String, dynamic> datosDinamicos;
 
+  @HiveField(8, defaultValue: false)
+  @override
+  final bool isSynced;
+
+  @HiveField(9)
+  @override
+  final int? numEncuesta;
+
   const CensoRecordModel({
     required this.id,
     required this.censoId,
@@ -46,6 +54,8 @@ class CensoRecordModel extends CensoRecord {
     required this.numeroHijos,
     required this.estatus,
     required this.datosDinamicos,
+    this.isSynced = false,
+    this.numEncuesta,
   }) : super(
           id: id,
           censoId: censoId,
@@ -55,6 +65,8 @@ class CensoRecordModel extends CensoRecord {
           numeroHijos: numeroHijos,
           estatus: estatus,
           datosDinamicos: datosDinamicos,
+          isSynced: isSynced,
+          numEncuesta: numEncuesta,
         );
 
   factory CensoRecordModel.fromEntity(CensoRecord entity) {
@@ -67,6 +79,8 @@ class CensoRecordModel extends CensoRecord {
       numeroHijos: entity.numeroHijos,
       estatus: entity.estatus,
       datosDinamicos: entity.datosDinamicos,
+      isSynced: entity.isSynced,
+      numEncuesta: entity.numEncuesta,
     );
   }
 
@@ -80,6 +94,8 @@ class CensoRecordModel extends CensoRecord {
       numeroHijos: numeroHijos,
       estatus: estatus,
       datosDinamicos: datosDinamicos,
+      isSynced: isSynced,
+      numEncuesta: numEncuesta,
     );
   }
 
@@ -93,6 +109,8 @@ class CensoRecordModel extends CensoRecord {
       'numeroHijos': numeroHijos,
       'estatus': estatus,
       'datosDinamicos': datosDinamicos,
+      'isSynced': isSynced,
+      'numEncuesta': numEncuesta,
     };
   }
 
@@ -106,6 +124,8 @@ class CensoRecordModel extends CensoRecord {
       numeroHijos: json['numeroHijos'] ?? 0,
       estatus: json['estatus'] ?? '',
       datosDinamicos: json['datosDinamicos'] != null ? Map<String, dynamic>.from(json['datosDinamicos']) : {},
+      isSynced: true,
+      numEncuesta: json['numEncuesta'] != null ? (json['numEncuesta'] as num).toInt() : null,
     );
   }
 }
