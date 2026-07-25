@@ -3,6 +3,11 @@ const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'comuniapp_secret_key_change_in_production_2026';
 
 const verifyToken = (req, res, next) => {
+    // Permitir preflight requests OPTIONS del navegador (CORS)
+    if (req.method === 'OPTIONS') {
+        return next();
+    }
+
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer <TOKEN>"
 

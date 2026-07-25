@@ -9,10 +9,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:printing/printing.dart';
-import 'package:flutter/services.dart' show NetworkAssetBundle, ByteData, rootBundle;
+import 'package:flutter/services.dart' show ByteData, rootBundle;
 import 'package:dio/dio.dart';
 import '../../../../core/services/mongodb_service.dart';
 import '../../domain/models/management_models.dart';
@@ -242,11 +239,17 @@ class _EventosDetailsPageState extends State<EventosDetailsPage> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('ALCALDÍA Y DESARROLLO COMUNITARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
-                      pw.Text('SISTEMA GENERAL COMUNIAPP', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                      pw.Text('COMUNIAPP - SISTEMA DE EVENTOS Y ACTIVIDADES', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                      pw.Text('Reporte Detallado de Actividad Individual', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     ],
                   ),
-                  pw.Text(DateFormat('dd/MM/yyyy').format(DateTime.now()), style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                      pw.Text('Pág. ${context.pageNumber} de ${context.pagesCount}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                    ],
+                  ),
                 ],
               ),
               pw.Divider(thickness: 1, color: PdfColors.indigo900),
@@ -262,7 +265,7 @@ class _EventosDetailsPageState extends State<EventosDetailsPage> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('Reporte Individual de Actividad - Comuniapp', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                  pw.Text('Pág. ${context.pageNumber} de ${context.pagesCount}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                  pw.Text('Documento generado automáticamente', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                 ],
               ),
             ],
@@ -325,15 +328,46 @@ class _EventosDetailsPageState extends State<EventosDetailsPage> {
             pw.Text('No se han registrado avances para esta actividad.', style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic))
           else
             ...timelineWidgets,
+
+          pw.SizedBox(height: 30),
+
+          // Firmas
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+            children: [
+              pw.Column(
+                children: [
+                  pw.Container(width: 150, height: 1, color: PdfColors.black),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Firma del Responsable', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                ],
+              ),
+              pw.Column(
+                children: [
+                  pw.Container(width: 150, height: 1, color: PdfColors.black),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Firma del Supervisor de Evento', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );
 
     final bytes = await pdf.save();
     if (!mounted) return;
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'reporte_${widget.item.name.replaceAll(' ', '_')}.pdf',
+    await FileSaver.save(
+      'reporte_${widget.item.name.replaceAll(' ', '_')}.pdf',
+      bytes,
+      'application/pdf',
+      (msg) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg), backgroundColor: Colors.green),
+          );
+        }
+      },
     );
   }
 

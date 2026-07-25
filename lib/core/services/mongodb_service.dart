@@ -158,4 +158,25 @@ class MongoDBService {
   Future<bool> deleteUser(String username) async {
     return deleteRecord('users', username);
   }
+
+  /// Verifica si el servidor backend y Render están activos (Health check)
+  Future<bool> checkHealth() async {
+    try {
+      final response = await _dio.get('/health', options: Options(
+        receiveTimeout: const Duration(seconds: 5),
+        sendTimeout: const Duration(seconds: 5),
+      ));
+      return response.statusCode == 200;
+    } catch (_) {
+      try {
+        final response = await _dio.get('/stats', options: Options(
+          receiveTimeout: const Duration(seconds: 5),
+          sendTimeout: const Duration(seconds: 5),
+        ));
+        return response.statusCode == 200;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
 }

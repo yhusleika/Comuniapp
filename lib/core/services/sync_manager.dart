@@ -60,6 +60,8 @@ class SyncManager extends ChangeNotifier {
     }
   }
 
+  bool _isSyncing = false;
+
   void init() {
     _subscription = connectivity.onConnectivityChanged.listen((result) {
       bool isConnected = false;
@@ -85,16 +87,60 @@ class SyncManager extends ChangeNotifier {
         syncData();
       }
     } as void Function(dynamic)?);
+
+    // Iniciar verificación y sincronización inicial al abrir la app
+    syncData();
   }
 
   Future<void> syncData() async {
-    // Sincronizando: se mantiene activo sin temporizador hasta que termine
-    _setStatus(
-      SyncStateEnum.syncing,
-      'Sincronizando con la base de datos...',
-    );
+    if (_isSyncing) return;
+    _isSyncing = true;
 
     try {
+      // 1. Protocolo de Verificación de Salud de Backend (Render Cold-Start)
+      bool backendReady = false;
+      int attempts = 0;
+      const maxAttempts = 20; // Hasta 20 intentos (~60 segundos para el despertar de Render)
+
+      while (!backendReady && attempts < maxAttempts) {
+        attempts++;
+        _setStatus(
+          SyncStateEnum.syncing,
+          attempts == 1
+              ? 'Conectando con el servidor en la nube...'
+              : 'Despertando servidor en la nube (Intento $attempts)...',
+        );
+
+        backendReady = await mongoDBService.checkHealth();
+        if (backendReady) break;
+
+        // Esperar 3 segundos entre verificaciones
+        await Future.delayed(const Duration(seconds: 3));
+      }
+
+      if (!backendReady) {
+        _isSyncing = false;
+        if (_isOffline) {
+          _setStatus(
+            SyncStateEnum.offline,
+            'Modo Offline — Los cambios se guardarán localmente',
+            autoHideSeconds: 5,
+          );
+        } else {
+          _setStatus(
+            SyncStateEnum.syncing,
+            'Conectando con el servidor en la nube...',
+          );
+        }
+        return;
+      }
+
+      // 2. Protocolo de Sincronización de Datos (Upload Queues)
+      _setStatus(
+        SyncStateEnum.syncing,
+        'Servidor activo. Sincronizando datos...',
+      );
+
       await _syncHabitants();
       await _syncReports();
       await _syncCensos();
@@ -103,10 +149,10 @@ class SyncManager extends ChangeNotifier {
       await _syncAuditLogs();
       await _syncEventos();
 
-      // Al terminar: pasa a Sincronizado y dura exactamente 5 segundos
+      // 3. Confirmación Final de Sincronización Exitosa
       _setStatus(
         SyncStateEnum.synced,
-        'Base de datos sincronizada',
+        'Sincronizado con la nube',
         autoHideSeconds: 5,
       );
     } catch (e) {
@@ -119,11 +165,12 @@ class SyncManager extends ChangeNotifier {
         );
       } else {
         _setStatus(
-          SyncStateEnum.synced,
-          'Base de datos sincronizada',
-          autoHideSeconds: 5,
+          SyncStateEnum.syncing,
+          'Conectando con el servidor en la nube...',
         );
       }
+    } finally {
+      _isSyncing = false;
     }
   }
 

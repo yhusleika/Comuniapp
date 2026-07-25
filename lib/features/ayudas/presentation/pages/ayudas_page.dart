@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import '../../../../core/utils/file_saver.dart';
+import '../../../../core/services/document_export_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
@@ -421,47 +420,29 @@ class _AyudasViewState extends State<AyudasView> {
       return;
     }
 
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        build: (pw.Context context) {
-          return [
-            pw.Header(
-              level: 0,
-              child: pw.Text('Reporte de Beneficiarios de Ayudas', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-            ),
-            pw.SizedBox(height: 10),
-            pw.TableHelper.fromTextArray(
-              headers: ['Nombre', 'Cédula', 'Ayuda Asignada', 'Fecha'],
-              data: list.map((b) => [
-                '${b.nombres} ${b.apellidos}',
-                b.cedula,
-                b.ayudaRecibida,
-                '${b.fechaRegistro.day}/${b.fechaRegistro.month}/${b.fechaRegistro.year}'
-              ]).toList(),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              cellAlignment: pw.Alignment.centerLeft,
-            ),
-          ];
-        },
-      ),
+    await DocumentExportService.exportToPDF(
+      moduleName: 'AYUDAS SOCIALES',
+      reportSubtitle: 'Reporte Oficial de Beneficiarios y Asignaciones',
+      reportTitle: 'REPORTE FORMAL DE BENEFICIARIOS DE AYUDAS',
+      description: 'El presente documento certfica la asignación formal de programas de apoyo social y asistencia comunitaria a los habitantes registrados en la plataforma ComuniApp.',
+      headers: ['Nombre Completo', 'Cédula', 'Sector', 'Ayuda Asignada', 'Fecha Registro'],
+      data: list.map((b) => [
+        '${b.nombres} ${b.apellidos}',
+        b.cedula,
+        b.sector,
+        b.ayudaRecibida.isEmpty ? 'Ninguna' : b.ayudaRecibida,
+        '${b.fechaRegistro.day.toString().padLeft(2, '0')}/${b.fechaRegistro.month.toString().padLeft(2, '0')}/${b.fechaRegistro.year}'
+      ]).toList(),
+      fileName: 'beneficiarios_ayudas.pdf',
+      signatureLeft: 'Firma del Coordinador de Asistencia',
+      signatureRight: 'Firma del Supervisor de Desarrollo Social',
     );
 
-    final bytes = await pdf.save();
-    await FileSaver.save(
-      'beneficiarios_ayudas.pdf',
-      bytes,
-      'application/pdf',
-      (msg) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(msg), backgroundColor: Colors.green),
-          );
-        }
-      },
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF de beneficiarios descargado'), backgroundColor: Colors.green),
+      );
+    }
   }
 
   void _confirmDeleteAidType(String id) {

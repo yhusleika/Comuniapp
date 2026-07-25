@@ -4,11 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:uuid/uuid.dart';
 import 'package:excel/excel.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/utils/file_saver.dart';
+import '../../../../core/services/document_export_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
@@ -517,102 +515,60 @@ class _HabitantsViewState extends State<HabitantsView> {
       return;
     }
 
-    final pdf = pw.Document();
+    final headers = [
+      'Nombre Completo',
+      'Cédula',
+      'Edad',
+      'Teléfono',
+      'Sector',
+      'Ayuda Recibida',
+      'Discap.',
+      'Enf. Crónica',
+      'Fecha Registro',
+    ];
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context ctx) {
-          return [
-            pw.Header(
-              level: 0,
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'Reporte de Habitantes',
-                    style: pw.TextStyle(
-                        fontSize: 22, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    'Comuniapp',
-                    style: const pw.TextStyle(
-                        fontSize: 14, color: PdfColors.grey600),
-                  ),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 8),
-            pw.Text(
-              'Generado: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}  •  Total: ${list.length} habitante(s)',
-              style: const pw.TextStyle(color: PdfColors.grey700, fontSize: 10),
-            ),
-            pw.SizedBox(height: 16),
-            pw.TableHelper.fromTextArray(
-              headers: [
-                'Nombre Completo',
-                'Cédula',
-                'Edad',
-                'Teléfono',
-                'Sector',
-                'Ayuda',
-                'Discap.',
-                'Fecha',
-              ],
-              data: list
-                  .map((h) {
-                    final birthDate = h.fechaNacimiento;
-                    String ageText = '-';
-                    if (birthDate != null) {
-                      final today = DateTime.now();
-                      int age = today.year - birthDate.year;
-                      if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
-                        age--;
-                      }
-                      ageText = '$age';
-                    }
-                    return [
-                      '${h.nombres} ${h.apellidos}',
-                      h.cedula,
-                      ageText,
-                      h.telefono.isEmpty ? '-' : h.telefono,
-                      h.sector,
-                      h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida,
-                      h.tieneDiscapacidad ? 'Sí' : 'No',
-                      '${h.fechaRegistro.day}/${h.fechaRegistro.month}/${h.fechaRegistro.year}',
-                    ];
-                  })
-                  .toList(),
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-                fontSize: 9,
-              ),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.indigo700),
-              cellStyle: const pw.TextStyle(fontSize: 8),
-              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
-              oddRowDecoration:
-                  const pw.BoxDecoration(color: PdfColors.indigo50),
-              cellAlignment: pw.Alignment.centerLeft,
-              cellPadding: const pw.EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 4),
-            ),
-          ];
-        },
-      ),
+    final data = list.map((h) {
+      final birthDate = h.fechaNacimiento;
+      String ageText = '-';
+      if (birthDate != null) {
+        final today = DateTime.now();
+        int age = today.year - birthDate.year;
+        if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
+          age--;
+        }
+        ageText = '$age';
+      }
+      return [
+        '${h.nombres} ${h.apellidos}',
+        h.cedula,
+        ageText,
+        h.telefono.isEmpty ? '-' : h.telefono,
+        h.sector,
+        h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida,
+        h.tieneDiscapacidad ? 'Sí' : 'No',
+        h.tieneEnfermedadCronica ? 'Sí' : 'No',
+        '${h.fechaRegistro.day.toString().padLeft(2, '0')}/${h.fechaRegistro.month.toString().padLeft(2, '0')}/${h.fechaRegistro.year}',
+      ];
+    }).toList();
+
+    await DocumentExportService.exportToPDF(
+      moduleName: 'REGISTRO DE HABITANTES',
+      reportSubtitle: 'Reporte Oficial del Padrón de Habitantes',
+      reportTitle: 'REPORTE FORMAL DE HABITANTES',
+      description: 'El presente documento consagra la nómina oficial de ciudadanos y familias registradas en el padrón municipal comunal de ComuniApp.',
+      headers: headers,
+      data: data,
+      fileName: 'habitantes_reporte.pdf',
+      landscape: true,
+      signatureLeft: 'Firma del Registrador Comunal',
+      signatureRight: 'Firma del Director de Atención al Ciudadano',
     );
 
-    final bytes = await pdf.save();
-
-    if (!mounted) return;
-
-    // Usar printing para vista previa / guardar / imprimir
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'habitantes.pdf',
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF de habitantes descargado'), backgroundColor: Colors.green),
+      );
+    }
   }
 }
 
@@ -649,7 +605,6 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
   bool _tieneEnfermedad = false;
 
   List<String> _dynamicSectores = SectoresHelper.defaultSectores;
-  static const _ayudas = ['Ninguna', 'Alimentación', 'Medicinas', 'Vivienda'];
   static const _condiciones = ['Propia', 'Alquilada', 'Prestada', 'Otra'];
   static const _tipos = ['Casa', 'Apartamento', 'Rancho', 'Habitación'];
 
@@ -859,88 +814,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
 
                       _sectionLabel('Clasificación'),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(child: _dropdown('Sector', _dynamicSectores, _zona, (v) => setState(() => _zona = v!))),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () async {
-                                final List<String> currentSelected = _ayuda == 'Ninguna' || _ayuda.trim().isEmpty
-                                    ? []
-                                    : _ayuda.split(',').map((e) => e.trim()).toList();
-                                
-                                final result = await showDialog<List<String>>(
-                                  context: context,
-                                  builder: (dialogCtx) {
-                                    List<String> tempSelected = List<String>.from(currentSelected);
-                                    return StatefulBuilder(
-                                      builder: (statefulCtx, setDialogState) {
-                                        return AlertDialog(
-                                          backgroundColor: Colors.white,
-                                          title: const Text('Seleccionar Ayudas', style: TextStyle(color: Colors.black87)),
-                                          content: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: _ayudas.where((a) => a != 'Ninguna').map((a) {
-                                              final isSelected = tempSelected.contains(a);
-                                              return CheckboxListTile(
-                                                activeColor: const Color(0xFF416FDF),
-                                                title: Text(a, style: const TextStyle(color: Colors.black87)),
-                                                value: isSelected,
-                                                onChanged: (val) {
-                                                  setDialogState(() {
-                                                    if (val == true) {
-                                                      tempSelected.add(a);
-                                                    } else {
-                                                      tempSelected.remove(a);
-                                                    }
-                                                  });
-                                                },
-                                              );
-                                            }).toList(),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(statefulCtx),
-                                              child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
-                                            ),
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFF416FDF),
-                                                foregroundColor: Colors.white,
-                                              ),
-                                              onPressed: () => Navigator.pop(statefulCtx, tempSelected),
-                                              child: const Text('Aceptar'),
-                                            ),
-                                          ],
-                                        );
-                                      }
-                                    );
-                                  }
-                                );
-                                if (result != null) {
-                                  setState(() {
-                                    _ayuda = result.isEmpty ? 'Ninguna' : result.join(', ');
-                                  });
-                                }
-                              },
-                              child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Ayudas Recibidas',
-                                  border: OutlineInputBorder(),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                ),
-                                child: Text(
-                                  _ayuda,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.black87),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      _dropdown('Sector', _dynamicSectores, _zona, (v) => setState(() => _zona = v!)),
                       const SizedBox(height: 12),
                       Row(
                         children: [

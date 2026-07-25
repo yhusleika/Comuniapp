@@ -3,16 +3,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:printing/printing.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
 import '../../../../core/utils/file_saver.dart';
+import '../../../../core/services/document_export_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../habitants/presentation/bloc/habitants_bloc.dart';
 import '../../../habitants/domain/entities/habitante.dart';
@@ -296,56 +292,29 @@ class _EventosViewState extends State<EventosView> {
       return;
     }
 
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) => [
-          pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Reporte de $_selectedCategory',
-                    style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Total: ${list.length}',
-                    style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 14),
-          pw.TableHelper.fromTextArray(
-            headers: ['Nombre', 'Fecha', 'Responsable', 'Progreso', 'Estatus'],
-            data: list.map((item) => [
-              item.name,
-              DateFormat('yyyy-MM-dd').format(item.date),
-              item.responsible,
-              '${(item.progress * 100).toInt()}%',
-              item.status,
-            ]).toList(),
-            headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-                fontSize: 9),
-            headerDecoration:
-                const pw.BoxDecoration(color: PdfColors.indigo700),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            oddRowDecoration:
-                const pw.BoxDecoration(color: PdfColors.indigo50),
-            cellPadding:
-                const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          ),
-        ],
-      ),
+    await DocumentExportService.exportToPDF(
+      moduleName: 'GESTIÓN DE EVENTOS Y ACTIVIDADES',
+      reportSubtitle: 'Reporte Oficial de $_selectedCategory Comunitarios',
+      reportTitle: 'REPORTE FORMAL DE ${(_selectedCategory).toUpperCase()}',
+      description: 'El presente documento compila el listado de actividades y proyectos de la categoría $_selectedCategory registrados en el municipio, incluyendo responsable, fecha y nivel de ejecución.',
+      headers: ['Nombre de Actividad', 'Fecha Programada', 'Responsable', 'Progreso', 'Estatus'],
+      data: list.map((item) => [
+        item.name,
+        DateFormat('dd/MM/yyyy').format(item.date),
+        item.responsible,
+        '${(item.progress * 100).toInt()}%',
+        item.status,
+      ]).toList(),
+      fileName: '${_selectedCategory.toLowerCase()}_report.pdf',
+      signatureLeft: 'Firma del Coordinador de Proyectos',
+      signatureRight: 'Firma del Director de Gestión',
     );
 
-    final bytes = await pdf.save();
-    if (!mounted) return;
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: '${_selectedCategory.toLowerCase()}_report.pdf',
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF de $_selectedCategory descargado'), backgroundColor: Colors.green),
+      );
+    }
   }
 
   @override

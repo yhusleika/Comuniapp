@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../../../../core/utils/file_saver.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
@@ -617,113 +614,7 @@ class _CensosViewState extends State<CensosView> {
     }
   }
 
-  // ─── Exportar a PDF ────────────────────────────────────────────────────────
 
-  Future<void> _exportToPDF() async {
-    final records = _notifier!.filteredRecords;
-    final censo = _notifier!.selectedCenso;
-    if (records.isEmpty || censo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('No hay registros para exportar'),
-            backgroundColor: Colors.orange),
-      );
-      return;
-    }
-
-    final activeFields = CensoDictionary.fields
-        .where((f) => censo.camposSeleccionados.contains(f.id))
-        .toList();
-    final personasFields = activeFields.where((f) => f.category == 'Datos de Personas').toList();
-    final householdFields = activeFields.where((f) => f.category != 'Datos de Personas').toList();
-
-    final headers = [
-      ...householdFields.map((f) => f.label),
-      ...personasFields.map((f) => f.label),
-      'Estatus'
-    ];
-
-    final List<List<String>> data = [];
-    for (final r in records) {
-      final list = r.datosDinamicos['familiares'] as List? ?? [];
-      if (list.isEmpty) {
-        final row = <String>[];
-        for (final f in householdFields) {
-          row.add(_formatValue(r.datosDinamicos[f.id]));
-        }
-        for (final f in personasFields) {
-          if (f.id == 'jefeFamilia') {
-            row.add(r.jefeFamilia);
-          } else if (f.id == 'cedula') {
-            row.add(r.cedula);
-          } else {
-            row.add('');
-          }
-        }
-        row.add(r.estatus);
-        data.add(row);
-      } else {
-        for (final m in list) {
-          final row = <String>[];
-          for (final f in householdFields) {
-            row.add(_formatValue(r.datosDinamicos[f.id]));
-          }
-          for (final f in personasFields) {
-            row.add(_formatValue(m[f.id]));
-          }
-          row.add(r.estatus);
-          data.add(row);
-        }
-      }
-    }
-
-    final pdf = pw.Document();
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter.landscape,
-        margin: const pw.EdgeInsets.all(16),
-        build: (pw.Context ctx) => [
-          pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Reporte Censo Completo: ${censo.nombre}',
-                    style: pw.TextStyle(
-                        fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Zona: ${censo.zona}  •  Responsable: ${censo.responsable}',
-                    style: const pw.TextStyle(
-                        fontSize: 10, color: PdfColors.grey700)),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 10),
-          pw.TableHelper.fromTextArray(
-            headers: headers,
-            data: data,
-            headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-                fontSize: 7),
-            headerDecoration:
-                const pw.BoxDecoration(color: PdfColors.teal700),
-            cellStyle: const pw.TextStyle(fontSize: 6),
-            oddRowDecoration:
-                const pw.BoxDecoration(color: PdfColors.teal50),
-            cellPadding:
-                const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-          ),
-        ],
-      ),
-    );
-
-    final bytes = await pdf.save();
-    if (!mounted) return;
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'censo_${censo.nombre}.pdf',
-    );
-  }
 
   // ─── Acciones ─────────────────────────────────────────────────────────────
 

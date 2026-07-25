@@ -1,4 +1,5 @@
 const Censo = require('../models/censo.model');
+const CensoRecord = require('../models/censo_record.model');
 
 const syncCenso = async (req, res) => {
     try {
@@ -35,12 +36,18 @@ const updateCenso = async (req, res) => {
 
 const deleteCenso = async (req, res) => {
     try {
-        const censo = await Censo.findOneAndDelete({ id: req.params.id });
+        const censoId = req.params.id;
+        const censo = await Censo.findOneAndDelete({ id: censoId });
         if (!censo) return res.status(404).json({ success: false, message: "Censo no encontrado" });
-        res.status(200).json({ success: true, message: "Censo eliminado" });
+
+        // Eliminar en cascada las encuestas/registros asociados a este censo
+        await CensoRecord.deleteMany({ censoId: censoId });
+
+        res.status(200).json({ success: true, message: "Censo y sus registros asociados eliminados" });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
 module.exports = { syncCenso, getCensos, updateCenso, deleteCenso };
+

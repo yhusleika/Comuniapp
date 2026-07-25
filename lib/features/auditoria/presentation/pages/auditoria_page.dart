@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../../core/utils/file_saver.dart';
+import '../../../../core/services/document_export_service.dart';
 
 import '../../domain/entities/audit_log.dart';
 import '../bloc/auditoria_bloc.dart';
@@ -92,108 +90,26 @@ class _AuditoriaViewState extends State<AuditoriaView> {
       return;
     }
 
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(32),
-        build: (pw.Context context) => [
-          // Logo/Header corporativo formal
-          pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('COMUNIAPP - SISTEMA DE AUDITORÍA',
-                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
-                    pw.Text('Reporte Oficial de Movimientos y Seguridad',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
-                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                    pw.Text('Página 1 de 1', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 20),
-
-          // Título Central
-          pw.Center(
-            child: pw.Text('REPORTE FORMAL DE AUDITORÍA',
-                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
-          ),
-          pw.SizedBox(height: 15),
-
-          // Breve descripción
-          pw.Text(
-            'El presente documento compila las últimas acciones críticas realizadas dentro del sistema ComuniApp, con el fin de auditar la integridad de la base de datos y la seguridad de los accesos de usuario.',
-            style: const pw.TextStyle(fontSize: 10, color: PdfColors.black),
-          ),
-          pw.SizedBox(height: 20),
-
-          // Tabla de Auditoría
-          pw.TableHelper.fromTextArray(
-            headers: ['Usuario', 'Rol', 'Acción Realizada', 'Fecha y Hora'],
-            data: list.map((log) => [
-              log.user,
-              log.role,
-              log.action,
-              DateFormat('dd/MM/yyyy HH:mm:ss').format(log.dateTime),
-            ]).toList(),
-            headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-                fontSize: 9),
-            headerDecoration:
-                const pw.BoxDecoration(color: PdfColors.indigo900),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            oddRowDecoration:
-                const pw.BoxDecoration(color: PdfColors.grey100),
-            cellPadding:
-                const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          ),
-
-          pw.SizedBox(height: 40),
-
-          // Firmas de Responsabilidad
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-            children: [
-              pw.Column(
-                children: [
-                  pw.Container(width: 150, height: 1, color: PdfColors.black),
-                  pw.SizedBox(height: 4),
-                  pw.Text('Firma del Administrador', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
-                ],
-              ),
-              pw.Column(
-                children: [
-                  pw.Container(width: 150, height: 1, color: PdfColors.black),
-                  pw.SizedBox(height: 4),
-                  pw.Text('Firma del Supervisor de Control', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800)),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
+    await DocumentExportService.exportToPDF(
+      moduleName: 'AUDITORÍA',
+      reportSubtitle: 'Reporte Oficial de Movimientos y Seguridad',
+      reportTitle: 'REPORTE FORMAL DE AUDITORÍA',
+      description: 'El presente documento compila las últimas acciones críticas realizadas dentro del sistema ComuniApp, con el fin de auditar la integridad de la base de datos y la seguridad de los accesos de usuario.',
+      headers: ['Usuario', 'Rol', 'Acción Realizada', 'Fecha y Hora'],
+      data: list.map((log) => [
+        log.user,
+        log.role,
+        log.action,
+        DateFormat('dd/MM/yyyy HH:mm:ss').format(log.dateTime),
+      ]).toList(),
+      fileName: 'reporte_auditoria_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
 
-    final bytes = await pdf.save();
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: 'reporte_auditoria_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PDF de auditoría descargado'), backgroundColor: Colors.green),
+      );
+    }
   }
 
   Future<void> _exportAuditToExcel() async {

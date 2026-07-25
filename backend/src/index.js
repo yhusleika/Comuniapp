@@ -14,25 +14,17 @@ connectDB();
 
 const app = express();
 
-// 1. Cabeceras HTTP de Seguridad (Helmet)
-app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }
+// 1. Control de CORS con soporte preflight para Flutter Web y móvil
+app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-user-role', 'x-username', 'X-User-Role', 'X-Username']
 }));
 
-// 2. Control de CORS con origenes filtrados
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
-    : ['http://localhost:3000', 'http://10.0.2.2:3000'];
-
-app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-            callback(null, true);
-        } else {
-            callback(new Error('Bloqueado por política de CORS de Comuniapp'));
-        }
-    },
-    credentials: true
+// 2. Cabeceras HTTP de Seguridad (Helmet)
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
 // 3. Rate Limiting (Prevención de ataques de Fuerza Bruta y DoS)
@@ -86,7 +78,7 @@ app.get('/', (req, res) => {
 });
 
 // Health check para Render y monitoreo
-app.get('/health', (req, res) => {
+app.get(['/health', '/v1/health'], (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

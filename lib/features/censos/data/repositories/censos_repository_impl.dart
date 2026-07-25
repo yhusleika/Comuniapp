@@ -257,6 +257,15 @@ class CensosRepositoryImpl implements CensosRepository {
       
       if (isConnected) {
         try {
+          final remoteRecords = await mongoDBService.getRecords('censo_records');
+          for (final r in remoteRecords) {
+            if ((r['censoId'] ?? '').toString() == id) {
+              final recId = (r['id'] ?? r['_id'] ?? '').toString();
+              if (recId.isNotEmpty) {
+                await mongoDBService.deleteRecord('censo_records', recId);
+              }
+            }
+          }
           await mongoDBService.deleteRecord('censos', id);
         } catch (e) {
           debugPrint('Error deleting censo from remote: $e');

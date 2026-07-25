@@ -6,6 +6,7 @@ import 'package:syncfusion_flutter_gauges/gauges.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
 import '../../../../core/services/hive_config.dart';
+import '../../../../core/services/mongodb_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../habitants/data/models/habitante_model.dart';
 import '../../../censos/data/models/censo_record_model.dart';
@@ -51,12 +52,12 @@ class _EstadisticasViewState extends State<EstadisticasView>
 
   // ── Dynamic data for the Premium Dashboard ─────────────────────────────────
   int _totalInhabitants = 0;
-  double _vulnerabilityRate = 18.0;
+  double _vulnerabilityRate = 0.0;
   int _totalCensos = 0;
   int _totalAyudas = 0;
   List<_DemographicItem> _ageDistribution = [];
-  double _femalePercentage = 50.0;
-  double _malePercentage = 50.0;
+  double _femalePercentage = 0.0;
+  double _malePercentage = 0.0;
   List<_DemographicItem> _educationLevels = [];
   List<_DonutSlice> _vulnerabilityData = [];
   bool _isLoading = true;
@@ -102,6 +103,20 @@ class _EstadisticasViewState extends State<EstadisticasView>
 
   Future<void> _loadAndAggregateData() async {
     try {
+      final mongoService = sl<MongoDBService>();
+      
+      Map<String, dynamic> remoteStats = {};
+      List<dynamic> remoteHabitants = [];
+      List<dynamic> remoteCensoRecords = [];
+      bool isRemoteConnected = false;
+
+      try {
+        remoteStats = await mongoService.getStats();
+        remoteHabitants = await mongoService.getRecords('habitants');
+        remoteCensoRecords = await mongoService.getRecords('censo_records');
+        isRemoteConnected = true;
+      } catch (_) {}
+
       final habitantsBox = Hive.isBoxOpen(HiveConfig.habitantsBox)
           ? Hive.box(HiveConfig.habitantsBox)
           : await Hive.openBox(HiveConfig.habitantsBox);
@@ -114,13 +129,77 @@ class _EstadisticasViewState extends State<EstadisticasView>
           ? Hive.box(HiveConfig.censosBox)
           : await Hive.openBox(HiveConfig.censosBox);
 
-      final allHabitants = habitantsBox.values.cast<HabitanteModel>().toList();
-      final allCensoRecords = censoRecordsBox.values.cast<CensoRecordModel>().toList();
-      final totalCensosCount = censosBox.length;
+      if (isRemoteConnected) {
+        // Sincronizar las cajas de Hive para eliminar registros locales fantasmas (ghost records) desincronizados
+        final remoteHabitantIds = remoteHabitants.map((r) => (r['id'] ?? r['_id'] ?? '').toString()).toSet();
+        final localHabitantesKeys = habitantsBox.keys.toList();
+        for (final k in localHabitantesKeys) {
+          final h = habitantsBox.get(k);
+          if (h is HabitanteModel && !remoteHabitantIds.contains(h.id)) {
+            await habitantsBox.delete(k);
+          }
+        }
 
-      int total = allHabitants.length;
-      int assignedAyudasCount = 0;
-      
+        final remoteCensoRecordIds = remoteCensoRecords.map((r) => (r['id'] ?? r['_id'] ?? '').toString()).toSet();
+        final localCensoRecordKeys = censoRecordsBox.keys.toList();
+        for (final k in localCensoRecordKeys) {
+          final r = censoRecordsBox.get(k);
+          if (r is CensoRecordModel && !remoteCensoRecordIds.contains(r.id)) {
+            await censoRecordsBox.delete(k);
+          }
+        }
+      }
+
+      final List<Map<String, dynamic>> allHabitants = [];
+      final Set<String> countedHabitanteIds = {};
+
+      if (isRemoteConnected) {
+        for (final r in remoteHabitants) {
+          final id = r['id']?.toString() ?? r['_id']?.toString() ?? '';
+          if (id.isNotEmpty) {
+            DateTime? birthDate;
+            if (r['fechaNacimiento'] != null) {
+              birthDate = DateTime.tryParse(r['fechaNacimiento'].toString());
+            }
+            allHabitants.add({
+              'id': id,
+              'nombres': r['nombres'] ?? '',
+              'apellidos': r['apellidos'] ?? '',
+              'cedula': r['cedula'] ?? '',
+              'fechaNacimiento': birthDate,
+              'ayudaRecibida': r['ayudaRecibida'] ?? '',
+              'tieneDiscapacidad': r['tieneDiscapacidad'] == true,
+              'detallesDiscapacidad': r['detallesDiscapacidad'] ?? '',
+            });
+          }
+        }
+      } else {
+        final localHabitants = habitantsBox.values.cast<HabitanteModel>().toList();
+        for (final h in localHabitants) {
+          allHabitants.add({
+            'id': h.id,
+            'nombres': h.nombres,
+            'apellidos': h.apellidos,
+            'cedula': h.cedula,
+            'fechaNacimiento': h.fechaNacimiento,
+            'ayudaRecibida': h.ayudaRecibida,
+            'tieneDiscapacidad': h.tieneDiscapacidad,
+            'detallesDiscapacidad': h.detallesDiscapacidad,
+          });
+        }
+      }
+
+      int total = isRemoteConnected
+          ? ((remoteStats['counts']?['habitants'] as int?) ?? remoteHabitants.length)
+          : habitantsBox.length;
+
+      int totalCensosCount = isRemoteConnected
+          ? ((remoteStats['counts']?['censos'] as int?) ?? censosBox.length)
+          : censosBox.length;
+
+      final int remoteAyudasCount = (remoteStats['counts']?['ayudas'] as int?) ?? 0;
+      int assignedAyudasCount = isRemoteConnected ? remoteAyudasCount : 0;
+
       int children = 0; // 0-14
       int youth = 0;    // 15-29
       int adults = 0;   // 30-59
@@ -144,8 +223,6 @@ class _EstadisticasViewState extends State<EstadisticasView>
       int volAuditiva = 0;
       int volIntelectual = 0;
 
-      final Set<String> countedHabitanteIds = {};
-
       void processAge(int age) {
         if (age < 15) {
           children++;
@@ -164,20 +241,29 @@ class _EstadisticasViewState extends State<EstadisticasView>
       }
 
       for (final h in allHabitants) {
-        countedHabitanteIds.add(h.id);
-        
-        if (isFemale(h.nombres)) {
+        final id = h['id'].toString();
+        countedHabitanteIds.add(id);
+
+        final nombres = h['nombres'] as String? ?? '';
+        if (isFemale(nombres)) {
           femaleCount++;
         } else {
           maleCount++;
         }
 
-        if (h.ayudaRecibida.isNotEmpty) {
-          assignedAyudasCount += h.ayudaRecibida.split(',').where((s) => s.trim().isNotEmpty).length;
+        final ayuda = h['ayudaRecibida'] as String? ?? '';
+        if (ayuda.isNotEmpty) {
+          assignedAyudasCount += ayuda.split(',').where((s) => s.trim().isNotEmpty).length;
         }
 
-        if (h.tieneDiscapacidad) {
-          final desc = h.detallesDiscapacidad.toLowerCase();
+        final DateTime? birthDate = h['fechaNacimiento'] as DateTime?;
+        if (birthDate != null) {
+          processAge(_calculateAge(birthDate));
+        }
+
+        final bool tieneDiscapacidad = h['tieneDiscapacidad'] == true;
+        if (tieneDiscapacidad) {
+          final desc = (h['detallesDiscapacidad'] as String? ?? '').toLowerCase();
           if (desc.contains('motor') || desc.contains('físic') || desc.contains('fisic')) {
             volMotora++;
           } else if (desc.contains('visual') || desc.contains('cieg') || desc.contains('vista')) {
@@ -194,47 +280,35 @@ class _EstadisticasViewState extends State<EstadisticasView>
         }
       }
 
-      for (final record in allCensoRecords) {
-        final familiares = record.datosDinamicos['familiares'] as List? ?? [];
+      // Procesar datos de censos según la fuente activa
+      final List<dynamic> allCensoRecords = isRemoteConnected
+          ? remoteCensoRecords.map((r) => (r['datosDinamicos'] as Map?) ?? r).toList()
+          : censoRecordsBox.values.cast<CensoRecordModel>().map((r) => r.datosDinamicos).toList();
+
+      for (final recordData in allCensoRecords) {
+        final familiares = (recordData is Map ? recordData['familiares'] : null) as List? ?? [];
         for (final m in familiares) {
           if (m is Map) {
             final String? habitanteId = m['habitanteId']?.toString();
             final isLinked = habitanteId != null && habitanteId.isNotEmpty;
-            
-            HabitanteModel? linkedHabitante;
-            if (isLinked) {
-              try {
-                linkedHabitante = allHabitants.firstWhere((h) => h.id == habitanteId);
-              } catch (_) {}
-            }
+            final alreadyCounted = isLinked && countedHabitanteIds.contains(habitanteId);
 
-            final name = linkedHabitante != null 
-                ? '${linkedHabitante.nombres} ${linkedHabitante.apellidos}' 
-                : (m['jefeFamilia']?.toString() ?? '');
-            
+            final name = m['jefeFamilia']?.toString() ?? m['nombres']?.toString() ?? '';
             final edu = m['escolaridad']?.toString() ?? '';
 
-            if (name.isNotEmpty) {
-              final alreadyCounted = isLinked && countedHabitanteIds.contains(habitanteId);
-              if (!alreadyCounted) {
-                if (isFemale(name)) {
-                  femaleCount++;
-                } else {
-                  maleCount++;
-                }
+            if (name.isNotEmpty && !alreadyCounted) {
+              if (isFemale(name)) {
+                femaleCount++;
+              } else {
+                maleCount++;
               }
             }
 
-            int? parsedAge;
-            if (linkedHabitante != null && linkedHabitante.fechaNacimiento != null) {
-              parsedAge = _calculateAge(linkedHabitante.fechaNacimiento!);
-            } else {
-              final ageStr = m['edad']?.toString() ?? '';
-              if (ageStr.isNotEmpty) {
-                parsedAge = int.tryParse(ageStr);
-              }
+            final ageStr = m['edad']?.toString() ?? '';
+            if (ageStr.isNotEmpty) {
+              final age = int.tryParse(ageStr);
+              if (age != null) processAge(age);
             }
-            processAge(parsedAge ?? 28);
 
             if (edu.isNotEmpty) {
               final matchedKey = eduCounts.keys.firstWhere(
@@ -244,92 +318,44 @@ class _EstadisticasViewState extends State<EstadisticasView>
               eduCounts[matchedKey] = eduCounts[matchedKey]! + 1;
             }
 
-            final alreadyCountedVuln = isLinked && countedHabitanteIds.contains(habitanteId);
-            if (!alreadyCountedVuln) {
-              if (linkedHabitante != null) {
-                if (linkedHabitante.tieneDiscapacidad) {
-                  final desc = linkedHabitante.detallesDiscapacidad.toLowerCase();
-                  if (desc.contains('motor') || desc.contains('físic') || desc.contains('fisic')) {
-                    volMotora++;
-                  } else if (desc.contains('visual') || desc.contains('cieg') || desc.contains('vista')) {
-                    volVisual++;
-                  } else if (desc.contains('audit') || desc.contains('sord')) {
-                    volAuditiva++;
-                  } else if (desc.contains('intel') || desc.contains('ment') || desc.contains('cognit')) {
-                    volIntelectual++;
-                  } else {
-                    volMotora++;
-                  }
-                } else {
+            if (!alreadyCounted) {
+              final discList = m['salud_discapacidad'];
+              if (discList != null) {
+                final str = discList.toString().toLowerCase();
+                if (str.contains('ninguna') || str.isEmpty) {
                   volNinguna++;
+                } else {
+                  if (str.contains('motor')) volMotora++;
+                  if (str.contains('visual')) volVisual++;
+                  if (str.contains('audit')) volAuditiva++;
+                  if (str.contains('intel')) volIntelectual++;
                 }
               } else {
-                final discList = m['salud_discapacidad'];
-                if (discList != null) {
-                  final str = discList.toString().toLowerCase();
-                  if (str.contains('ninguna') || str.isEmpty) {
-                    volNinguna++;
-                  } else {
-                    if (str.contains('motor')) volMotora++;
-                    if (str.contains('visual')) volVisual++;
-                    if (str.contains('audit')) volAuditiva++;
-                    if (str.contains('intel')) volIntelectual++;
-                  }
-                } else {
-                  volNinguna++;
-                }
+                volNinguna++;
               }
             }
           }
         }
       }
 
-      int finalCensosCount = totalCensosCount;
-      if (total == 0) {
-        total = 1248;
-        children = 187;
-        youth = 499;
-        adults = 374;
-        seniors = 188;
-        femaleCount = 649;
-        maleCount = 599;
-        eduCounts = {
-          'Analfabeta': 50,
-          'Primaria': 312,
-          'Secundaria': 561,
-          'Técnica': 187,
-          'Universitaria': 150,
-          'Otro': 38,
-        };
-        volNinguna = 1023;
-        volMotora = 75;
-        volVisual = 62;
-        volAuditiva = 50;
-        volIntelectual = 38;
-        assignedAyudasCount = 42;
-        finalCensosCount = 7;
-      } else if (finalCensosCount == 0) {
-        finalCensosCount = 1; // default at least 1 censo if data exists but censo record list is empty
-      }
-
       final double totalGender = (femaleCount + maleCount).toDouble();
-      final fPct = totalGender > 0 ? (femaleCount / totalGender) * 100 : 50.0;
-      final mPct = totalGender > 0 ? (maleCount / totalGender) * 100 : 50.0;
+      final fPct = totalGender > 0 ? (femaleCount / totalGender) * 100 : 0.0;
+      final mPct = totalGender > 0 ? (maleCount / totalGender) * 100 : 0.0;
 
       final double totalAge = (children + youth + adults + seniors).toDouble();
-      final double cPct = totalAge > 0 ? (children / totalAge) * 100 : 15.0;
-      final double yPct = totalAge > 0 ? (youth / totalAge) * 100 : 40.0;
-      final double aPct = totalAge > 0 ? (adults / totalAge) * 100 : 30.0;
-      final double sPct = totalAge > 0 ? (seniors / totalAge) * 100 : 15.0;
+      final double cPct = totalAge > 0 ? (children / totalAge) * 100 : 0.0;
+      final double yPct = totalAge > 0 ? (youth / totalAge) * 100 : 0.0;
+      final double aPct = totalAge > 0 ? (adults / totalAge) * 100 : 0.0;
+      final double sPct = totalAge > 0 ? (seniors / totalAge) * 100 : 0.0;
 
       final double totalEdu = eduCounts.values.fold(0, (sum, val) => sum + val).toDouble();
       final double totalVol = (volNinguna + volMotora + volVisual + volAuditiva + volIntelectual).toDouble();
-      final double vulnPct = totalVol > 0 ? ((volMotora + volVisual + volAuditiva + volIntelectual) / totalVol) * 100 : 18.0;
+      final double vulnPct = totalVol > 0 ? ((volMotora + volVisual + volAuditiva + volIntelectual) / totalVol) * 100 : 0.0;
 
       setState(() {
         _totalInhabitants = total;
         _vulnerabilityRate = double.parse(vulnPct.toStringAsFixed(1));
-        _totalCensos = finalCensosCount;
+        _totalCensos = totalCensosCount;
         _totalAyudas = assignedAyudasCount;
         _femalePercentage = double.parse(fPct.toStringAsFixed(1));
         _malePercentage = double.parse(mPct.toStringAsFixed(1));
@@ -342,7 +368,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
         ];
 
         _educationLevels = eduCounts.entries.map((e) {
-          final pct = totalEdu > 0 ? (e.value / totalEdu) * 100 : 15.0;
+          final pct = totalEdu > 0 ? (e.value / totalEdu) * 100 : 0.0;
           IconData icon;
           Color color;
           switch (e.key) {
@@ -374,17 +400,17 @@ class _EstadisticasViewState extends State<EstadisticasView>
         }).toList();
 
         _vulnerabilityData = [
-          _DonutSlice('Ninguna', totalVol > 0 ? (volNinguna / totalVol) * 100 : 82.0, Colors.grey.shade400),
-          _DonutSlice('Motora', totalVol > 0 ? (volMotora / totalVol) * 100 : 6.0, const Color(0xFF416FDF)),
-          _DonutSlice('Visual', totalVol > 0 ? (volVisual / totalVol) * 100 : 5.0, Colors.teal),
-          _DonutSlice('Auditiva', totalVol > 0 ? (volAuditiva / totalVol) * 100 : 4.0, Colors.orange),
-          _DonutSlice('Intelectual', totalVol > 0 ? (volIntelectual / totalVol) * 100 : 3.0, Colors.purple),
+          _DonutSlice('Ninguna', totalVol > 0 ? double.parse(((volNinguna / totalVol) * 100).toStringAsFixed(1)) : 0.0, Colors.grey.shade400),
+          _DonutSlice('Motora', totalVol > 0 ? double.parse(((volMotora / totalVol) * 100).toStringAsFixed(1)) : 0.0, const Color(0xFF416FDF)),
+          _DonutSlice('Visual', totalVol > 0 ? double.parse(((volVisual / totalVol) * 100).toStringAsFixed(1)) : 0.0, Colors.teal),
+          _DonutSlice('Auditiva', totalVol > 0 ? double.parse(((volAuditiva / totalVol) * 100).toStringAsFixed(1)) : 0.0, Colors.orange),
+          _DonutSlice('Intelectual', totalVol > 0 ? double.parse(((volIntelectual / totalVol) * 100).toStringAsFixed(1)) : 0.0, Colors.purple),
         ];
 
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error aggregating statistics: $e');
+      debugPrint('Error agregando estadísticas reales: $e');
       setState(() {
         _isLoading = false;
       });
@@ -410,21 +436,23 @@ class _EstadisticasViewState extends State<EstadisticasView>
       _chatMessages.add(_ChatMessage(text: query, isSystem: false));
     });
 
-    // Simulate thinking delay
-    Future.delayed(const Duration(milliseconds: 650), () {
+    Future.delayed(const Duration(milliseconds: 500), () {
       if (!mounted) return;
       
       final lower = query.toLowerCase();
-      String response = 'No entiendo tu consulta. Intenta preguntar sobre el total de habitantes, edad, escolaridad o vulnerabilidad.';
+      String response = 'Consulta no reconocida. Puedes consultar sobre el total de habitantes, edades, escolaridad o vulnerabilidad.';
       
       if (lower.contains('total') || lower.contains('habitante') || lower.contains('poblacion')) {
-        response = 'El total de habitantes registrados en la comunidad es de 1,248 personas. El 52% representa al género femenino y el 48% al masculino.';
+        response = 'En la base de datos de la comunidad hay registrados $_totalInhabitants habitantes. Distribución por género: $_femalePercentage% femenino y $_malePercentage% masculino.';
       } else if (lower.contains('edad') || lower.contains('joven') || lower.contains('niño') || lower.contains('anciano') || lower.contains('mayor')) {
-        response = 'Nuestra población es mayormente joven: el 40% son jóvenes (15-29 años), seguido por un 30% de adultos (30-59 años), y un 15% de niños y 15% de adultos mayores respectivamente.';
+        final ageStr = _ageDistribution.map((e) => '${e.label}: ${e.percentage}%').join(', ');
+        response = 'Distribución por edades calculada desde el sistema: $ageStr.';
       } else if (lower.contains('educa') || lower.contains('escolar') || lower.contains('estudio') || lower.contains('universi') || lower.contains('secunda')) {
-        response = 'La escolaridad se concentra principalmente en secundaria (45%), seguido de primaria (25%), educación técnica (15%), universitaria (12%) y postgrado (3%).';
+        final eduStr = _educationLevels.map((e) => '${e.label}: ${e.percentage}%').join(', ');
+        response = 'Nivel de escolaridad registrado en la comunidad: $eduStr.';
       } else if (lower.contains('vulnera') || lower.contains('discapa') || lower.contains('salud') || lower.contains('enfermedad')) {
-        response = 'La tasa general de vulnerabilidad física/intelectual es del 18.0%. Esto incluye condiciones motoras (6%), visuales (5%), auditivas (4%) e intelectuales (3%).';
+        final vulnStr = _vulnerabilityData.map((e) => '${e.label}: ${e.value.toStringAsFixed(1)}%').join(', ');
+        response = 'La tasa global de vulnerabilidad por condición o discapacidad es del $_vulnerabilityRate%. Desglose: $vulnStr.';
       }
       
       setState(() {
@@ -652,6 +680,8 @@ class _EstadisticasViewState extends State<EstadisticasView>
     );
   }
 
+  static const bool _showAiFeatures = false;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -683,61 +713,74 @@ class _EstadisticasViewState extends State<EstadisticasView>
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : FadeTransition(
-                opacity: _fadeAnimation,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Header ──────────────────────────────────────────────────
-                      _buildHeader(theme),
-                      const SizedBox(height: 24),
+            : Stack(
+                children: [
+                  FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Header ──────────────────────────────────────────────────
+                          _buildHeader(theme),
+                          const SizedBox(height: 24),
 
-                      // ── KPI Cards Grid ──────────────────────────────────────────
-                      _buildKpiGrid(isWide),
-                      const SizedBox(height: 24),
+                          // ── KPI Cards Grid ──────────────────────────────────────────
+                          _buildKpiGrid(isWide),
+                          const SizedBox(height: 24),
 
-                      // ── Demographics & Gender Row ────────────────────────────────
-                      isWide
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(flex: 1, child: _buildAgeDistributionCard(theme)),
-                                const SizedBox(width: 20),
-                                Expanded(flex: 1, child: _buildGenderCard(theme)),
-                              ],
-                            )
-                          : Column(
-                              children: [
-                                _buildAgeDistributionCard(theme),
-                                const SizedBox(height: 20),
-                                _buildGenderCard(theme),
-                              ],
-                            ),
-                      const SizedBox(height: 24),
+                          // ── Demographics & Gender Row ────────────────────────────────
+                          isWide
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(flex: 1, child: _buildAgeDistributionCard(theme)),
+                                    const SizedBox(width: 20),
+                                    Expanded(flex: 1, child: _buildGenderCard(theme)),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    _buildAgeDistributionCard(theme),
+                                    const SizedBox(height: 20),
+                                    _buildGenderCard(theme),
+                                  ],
+                                ),
+                          const SizedBox(height: 24),
 
-                      // ── Education & Vulnerability Row ────────────────────────────
-                      isWide
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(flex: 1, child: _buildEducationCard(theme)),
-                                const SizedBox(width: 20),
-                                Expanded(flex: 1, child: _buildVulnerabilityCard(theme)),
-                              ],
-                            )
-                          : Column(
-                              children: [
-                                _buildEducationCard(theme),
-                                const SizedBox(height: 20),
-                                _buildVulnerabilityCard(theme),
-                              ],
-                            ),
-                      const SizedBox(height: 24),
-                    ],
+                          // ── Education & Vulnerability Row ────────────────────────────
+                          isWide
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(flex: 1, child: _buildEducationCard(theme)),
+                                    const SizedBox(width: 20),
+                                    Expanded(flex: 1, child: _buildVulnerabilityCard(theme)),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    _buildEducationCard(theme),
+                                    const SizedBox(height: 20),
+                                    _buildVulnerabilityCard(theme),
+                                  ],
+                                ),
+                          const SizedBox(height: 24),
+
+                          // ── AI Insights Premium Card (Oculto por defecto) ───────────
+                          if (_showAiFeatures) ...[
+                            _buildAiInsightsCard(theme),
+                            const SizedBox(height: 80),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+
+                  // ── AI Chatbot Floating Overlay (Oculto por defecto) ─────────────
+                  if (_showAiFeatures) _buildChatbotOverlay(theme),
+                ],
               ),
       ),
     );
@@ -803,8 +846,8 @@ class _EstadisticasViewState extends State<EstadisticasView>
 
   Widget _buildKpiGrid(bool isWide) {
     final cards = [
-      _KpiData('Habitantes Registrados', '$_totalInhabitants', '+12% este mes', Icons.people_alt, const Color(0xFF4A90E2), true),
-      _KpiData('Tasa de Vulnerabilidad', '$_vulnerabilityRate%', '+1.2%', Icons.health_and_safety, Colors.teal, true),
+      _KpiData('Habitantes Registrados', '$_totalInhabitants', 'Total', Icons.people_alt, const Color(0xFF4A90E2), true),
+      _KpiData('Tasa de Vulnerabilidad', '$_vulnerabilityRate%', 'Calculado', Icons.health_and_safety, Colors.teal, true),
       _KpiData('Censos Finalizados', '$_totalCensos', 'Completo', Icons.assignment_turned_in, Colors.orange, true),
       _KpiData('Ayudas Entregadas', '$_totalAyudas', 'Entregado', Icons.volunteer_activism, Colors.purple, false),
     ];
@@ -916,6 +959,13 @@ class _EstadisticasViewState extends State<EstadisticasView>
   // ── AI Insights Premium Box ────────────────────────────────────────────────
 
   Widget _buildAiInsightsCard(ThemeData theme) {
+    final youthPctStr = _ageDistribution.length > 1 ? '${_ageDistribution[1].percentage}%' : '0%';
+    final seniorPctStr = _ageDistribution.length > 3 ? '${_ageDistribution[3].percentage}%' : '0%';
+    final secEduStr = _educationLevels.firstWhere(
+      (e) => e.label == 'Secundaria',
+      orElse: () => const _DemographicItem('Secundaria', 0, Colors.black, Icons.school),
+    ).percentage;
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -966,7 +1016,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
                           Icon(Icons.auto_awesome, color: Colors.yellowAccent, size: 16),
                           SizedBox(width: 6),
                           Text(
-                            'Insights Generados por IA',
+                            'Insights de IA (En Tiempo Real)',
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -990,27 +1040,27 @@ class _EstadisticasViewState extends State<EstadisticasView>
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Basado en la consolidación de censos locales y características registradas de los habitantes:',
-                  style: TextStyle(color: Color(0xDDFFFFFF), fontSize: 13),
+                Text(
+                  'Basado en la consolidación real de censos y habitantes registrados ($_totalInhabitants registrados en total):',
+                  style: const TextStyle(color: Color(0xDDFFFFFF), fontSize: 13),
                 ),
                 const SizedBox(height: 20),
                 _buildInsightBullet(
                   Icons.explore,
-                  'Fuerza Laboral Joven Mandatoria:',
-                  'El 40% de la población se encuentra en el rango de juventud (15-29 años). Existe una oportunidad masiva para talleres de capacitación tecnológica e inserción laboral.',
+                  'Distribución de Fuerza Laboral:',
+                  'El $youthPctStr de la población registrada está en el rango de jóvenes (15-29 años). El sistema recomienda orientar proyectos a la capacitación activa.',
                 ),
                 const Divider(color: Colors.white24, height: 24),
                 _buildInsightBullet(
                   Icons.favorite,
-                  'Salud Preventiva Focalizada:',
-                  'Con un 15% de adultos mayores y una tasa de vulnerabilidad por discapacidad del 18.0%, se recomienda estructurar jornadas médicas a domicilio coordinando con el sector salud.',
+                  'Atenciones Sanitarias Prioritarias:',
+                  'Con un $seniorPctStr de adultos mayores y una tasa de vulnerabilidad del $_vulnerabilityRate%, se aconseja estructurar visitas asistenciales focalizadas.',
                 ),
                 const Divider(color: Colors.white24, height: 24),
                 _buildInsightBullet(
                   Icons.trending_up,
                   'Estrategia de Educación Productiva:',
-                  'El nivel de educación secundaria alcanza el 45% mientras que el técnico/universitario es del 27%. Alianzas con institutos técnicos impulsarán el desarrollo económico regional.',
+                  'La educación secundaria alcanza un $secEduStr% de la muestra escolarizada en la comunidad, lo que permite proyectar cursos de especialización técnica.',
                 ),
               ],
             ),
@@ -1316,7 +1366,10 @@ class _EstadisticasViewState extends State<EstadisticasView>
         children: [
           SizedBox(
             height: 150,
-            child: _DonutChartWidget(slices: _vulnerabilityData),
+            child: _DonutChartWidget(
+              slices: _vulnerabilityData,
+              vulnerabilityRate: _vulnerabilityRate,
+            ),
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -1430,7 +1483,11 @@ class _ChartCard extends StatelessWidget {
 
 class _DonutChartWidget extends StatelessWidget {
   final List<_DonutSlice> slices;
-  const _DonutChartWidget({required this.slices});
+  final double vulnerabilityRate;
+  const _DonutChartWidget({
+    required this.slices,
+    required this.vulnerabilityRate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1440,10 +1497,10 @@ class _DonutChartWidget extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              '18%',
-              style: TextStyle(
-                fontSize: 24,
+            Text(
+              '${vulnerabilityRate.toStringAsFixed(1)}%',
+              style: const TextStyle(
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),
