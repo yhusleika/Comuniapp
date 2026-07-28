@@ -363,9 +363,8 @@ class _EstadisticasViewState extends State<EstadisticasView>
                   if (str.contains('audit')) volAuditiva++;
                   if (str.contains('intel')) volIntelectual++;
                 }
-              } else {
-                volNinguna++;
               }
+            }
           }
         }
       }
