@@ -366,9 +366,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
               } else {
                 volNinguna++;
               }
-            }
           }
-        }
         }
       }
 
