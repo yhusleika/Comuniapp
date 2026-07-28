@@ -8,12 +8,12 @@ import '../../../../shared/widgets/side_menu.dart';
 import '../../../../core/services/hive_config.dart';
 import '../../../../core/services/mongodb_service.dart';
 import '../../../../core/di/injection_container.dart';
-import '../../../habitants/data/models/habitante_model.dart';
+import '../../../habitantes/data/models/habitante_model.dart';
 import '../../../censos/data/models/censo_record_model.dart';
 import '../../../censos/presentation/bloc/censos_bloc.dart';
 import '../../../censos/presentation/bloc/censos_event.dart';
 import '../../../censos/presentation/bloc/censos_state.dart';
-import '../../../habitants/presentation/bloc/habitants_bloc.dart';
+import '../../../habitantes/presentation/bloc/habitants_bloc.dart';
 
 class EstadisticasPage extends StatelessWidget {
   const EstadisticasPage({super.key});
@@ -166,6 +166,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
               'nombres': r['nombres'] ?? '',
               'apellidos': r['apellidos'] ?? '',
               'cedula': r['cedula'] ?? '',
+              'genero': r['genero'] ?? '',
               'fechaNacimiento': birthDate,
               'ayudaRecibida': r['ayudaRecibida'] ?? '',
               'tieneDiscapacidad': r['tieneDiscapacidad'] == true,
@@ -181,6 +182,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
             'nombres': h.nombres,
             'apellidos': h.apellidos,
             'cedula': h.cedula,
+            'genero': h.genero,
             'fechaNacimiento': h.fechaNacimiento,
             'ayudaRecibida': h.ayudaRecibida,
             'tieneDiscapacidad': h.tieneDiscapacidad,
@@ -190,16 +192,14 @@ class _EstadisticasViewState extends State<EstadisticasView>
       }
 
       int total = isRemoteConnected
-          ? ((remoteStats['counts']?['habitants'] as int?) ?? remoteHabitants.length)
+          ? math.max(allHabitants.length, (remoteStats['counts']?['habitants'] as int?) ?? 0)
           : habitantsBox.length;
 
       int totalCensosCount = isRemoteConnected
           ? ((remoteStats['counts']?['censos'] as int?) ?? censosBox.length)
           : censosBox.length;
-
       final int remoteAyudasCount = (remoteStats['counts']?['ayudas'] as int?) ?? 0;
       int assignedAyudasCount = isRemoteConnected ? remoteAyudasCount : 0;
-
       int children = 0; // 0-14
       int youth = 0;    // 15-29
       int adults = 0;   // 30-59
@@ -235,17 +235,45 @@ class _EstadisticasViewState extends State<EstadisticasView>
         }
       }
 
-      bool isFemale(String name) {
+      bool isFemale(String name, [String? explicitGender]) {
+        if (explicitGender != null && explicitGender.trim().isNotEmpty) {
+          final g = explicitGender.trim().toLowerCase();
+          if (g == 'mujer' || g == 'femenino' || g == 'f') return true;
+          if (g == 'hombre' || g == 'masculino' || g == 'm') return false;
+        }
         final clean = name.trim().split(' ').first.toLowerCase();
         return clean.endsWith('a') || clean.endsWith('is') || clean.endsWith('en') || clean.endsWith('ly') || clean.endsWith('i');
       }
 
+      // Buscar datos de escolaridad en registros de censos que estén enlazados a los habitantes registrados
+      final List<dynamic> allCensoRecords = isRemoteConnected
+          ? remoteCensoRecords.map((r) => (r['datosDinamicos'] as Map?) ?? r).toList()
+          : censoRecordsBox.values.cast<CensoRecordModel>().map((r) => r.datosDinamicos).toList();
+
+      final Map<String, String> linkedEscolaridad = {};
+      for (final recordData in allCensoRecords) {
+        final familiares = (recordData is Map ? recordData['familiares'] : null) as List? ?? [];
+        for (final m in familiares) {
+          if (m is Map) {
+            final String? hId = m['habitanteId']?.toString();
+            final String? ced = m['cedula']?.toString();
+            final String edu = m['escolaridad']?.toString() ?? '';
+            if (edu.isNotEmpty) {
+              if (hId != null && hId.isNotEmpty) linkedEscolaridad[hId] = edu;
+              if (ced != null && ced.isNotEmpty) linkedEscolaridad[ced] = edu;
+            }
+          }
+        }
+      }
+
       for (final h in allHabitants) {
         final id = h['id'].toString();
+        final cedula = h['cedula'].toString();
         countedHabitanteIds.add(id);
 
         final nombres = h['nombres'] as String? ?? '';
-        if (isFemale(nombres)) {
+        final genero = h['genero'] as String? ?? '';
+        if (isFemale(nombres, genero)) {
           femaleCount++;
         } else {
           maleCount++;
@@ -278,13 +306,18 @@ class _EstadisticasViewState extends State<EstadisticasView>
         } else {
           volNinguna++;
         }
+
+        final edu = h['escolaridad']?.toString() ?? linkedEscolaridad[id] ?? linkedEscolaridad[cedula] ?? '';
+        if (edu.isNotEmpty) {
+          final matchedKey = eduCounts.keys.firstWhere(
+            (k) => edu.toLowerCase().contains(k.toLowerCase()),
+            orElse: () => 'Otro',
+          );
+          eduCounts[matchedKey] = eduCounts[matchedKey]! + 1;
+        }
       }
 
-      // Procesar datos de censos según la fuente activa
-      final List<dynamic> allCensoRecords = isRemoteConnected
-          ? remoteCensoRecords.map((r) => (r['datosDinamicos'] as Map?) ?? r).toList()
-          : censoRecordsBox.values.cast<CensoRecordModel>().map((r) => r.datosDinamicos).toList();
-
+      // Procesar datos adicionales de censos
       for (final recordData in allCensoRecords) {
         final familiares = (recordData is Map ? recordData['familiares'] : null) as List? ?? [];
         for (final m in familiares) {
@@ -310,7 +343,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
               if (age != null) processAge(age);
             }
 
-            if (edu.isNotEmpty) {
+            if (edu.isNotEmpty && !alreadyCounted) {
               final matchedKey = eduCounts.keys.firstWhere(
                 (k) => edu.toLowerCase().contains(k.toLowerCase()),
                 orElse: () => 'Otro',
@@ -335,6 +368,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
               }
             }
           }
+        }
         }
       }
 
@@ -834,7 +868,12 @@ class _EstadisticasViewState extends State<EstadisticasView>
                         child: Text(p, style: const TextStyle(color: Colors.white)),
                       ))
                   .toList(),
-              onChanged: (val) => setState(() => _selectedPeriod = val!),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => _selectedPeriod = val);
+                  _loadAndAggregateData();
+                }
+              },
             ),
           ),
         ),

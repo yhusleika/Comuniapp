@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const habitanteSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true }, // Usaremos el ID generado localmente en Hive
-    cedula: { type: String, required: true },
+    cedula: { type: String, default: '' },
     nombres: { type: String, required: true },
     apellidos: { type: String, required: true },
     telefono: { type: String, required: true },
@@ -17,6 +17,7 @@ const habitanteSchema = new mongoose.Schema({
     registeredBy: { type: String, required: true },
     fechaRegistro: { type: Date, required: true },
     fechaNacimiento: { type: Date },
+    genero: { type: String, default: '' },
     ayudaRecibida: { type: String, default: '' }
 }, {
     timestamps: true

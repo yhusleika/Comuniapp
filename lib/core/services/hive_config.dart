@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../features/auth/data/models/user_model.dart';
-import '../../features/habitants/data/models/habitante_model.dart';
+import '../../features/habitantes/data/models/habitante_model.dart';
 import '../../features/reports/data/models/reporte_model.dart';
 import '../../features/ayudas/data/models/ayuda_type_model.dart';
 import '../../features/censos/data/models/censo_model.dart';
@@ -83,6 +83,7 @@ class HiveConfig {
     await _openSafeBox(censoRecordsBox, cipher: cipher);
     await _openSafeBox(auditoriaBox, cipher: cipher);
     await _openSafeBox(eventosBox, cipher: cipher);
+    await _openSafeBox(recoveredCredentialsBox, cipher: cipher);
   }
 
   static const String habitantsBox = 'habitants';
@@ -94,5 +95,6 @@ class HiveConfig {
   static const String censoRecordsBox = 'censo_records';
   static const String auditoriaBox = 'auditoria_logs';
   static const String eventosBox = 'eventos';
+  static const String recoveredCredentialsBox = 'recovered_credentials';
 }
 

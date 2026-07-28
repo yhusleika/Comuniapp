@@ -138,12 +138,6 @@ class ProfileRepositoryImpl implements ProfileRepository {
       final box = await Hive.openBox(HiveConfig.userBox);
       await box.put('current_user', updatedModel);
 
-      // If password changed, update recovered_credentials too so offline login matches
-      if (newPassword != null && newPassword.isNotEmpty) {
-        final recoveredBox = await Hive.openBox('recovered_credentials');
-        await recoveredBox.put(user.username, newPassword);
-      }
-
       return Right(updatedModel);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

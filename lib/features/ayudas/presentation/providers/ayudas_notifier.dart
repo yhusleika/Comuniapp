@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/ayuda_type.dart';
-import '../../../habitants/domain/entities/habitante.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
 
 class AyudasNotifier extends ChangeNotifier {
   bool isAuditor;

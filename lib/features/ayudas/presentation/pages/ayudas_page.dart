@@ -7,12 +7,12 @@ import '../../../../core/services/document_export_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
-import '../../../habitants/presentation/bloc/habitants_bloc.dart';
+import '../../../habitantes/presentation/bloc/habitants_bloc.dart';
 import '../bloc/ayudas_bloc.dart';
 import '../bloc/ayudas_event.dart';
 import '../bloc/ayudas_state.dart';
 import '../providers/ayudas_notifier.dart';
-import '../../../habitants/domain/entities/habitante.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
 import '../../domain/entities/ayuda_type.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 

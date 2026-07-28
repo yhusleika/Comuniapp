@@ -184,12 +184,13 @@ class _AuditoriaViewState extends State<AuditoriaView> {
               final displayUser = rawUser.isEmpty ? 'admin' : rawUser;
               final displayRole = AuditLoggerService.formatRole(log.role);
               final displayAction = AuditLoggerService.sanitizeAction(log.action);
+              final venezuelaTime = AuditLoggerService.toVenezuelaTime(log.dateTime);
               return AuditLog(
                 id: log.id,
                 user: displayUser,
                 role: displayRole,
                 action: displayAction,
-                dateTime: log.dateTime,
+                dateTime: venezuelaTime,
               );
             }).toList();
           }

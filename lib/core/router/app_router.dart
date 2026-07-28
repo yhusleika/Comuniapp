@@ -3,11 +3,10 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../features/auth/presentation/pages/login_page.dart';
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
-import '../../../features/habitants/presentation/pages/habitants_page.dart';
-import '../../../features/habitants/presentation/bloc/habitants_bloc.dart';
+import '../../../features/habitantes/presentation/pages/habitants_page.dart';
+import '../../../features/habitantes/presentation/bloc/habitants_bloc.dart';
 import '../di/injection_container.dart';
 import '../../../features/reports/presentation/pages/reports_page.dart';
-import '../../../features/street_info/presentation/pages/street_info_page.dart';
 import '../../../features/ayudas/presentation/pages/ayudas_page.dart';
 import '../../../features/censos/presentation/pages/censos_page.dart';
 import '../../../features/eventos/presentation/pages/eventos_page.dart';
@@ -18,7 +17,6 @@ import '../../../features/configuracion/presentation/pages/configuracion_page.da
 import '../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../features/administracion/presentation/pages/administracion_general_page.dart';
 import '../../../features/auditoria/presentation/pages/auditoria_page.dart';
-import '../../../features/comuna/presentation/pages/comuna_page.dart';
 import 'auth_notifier.dart';
 
 GoRouter createAppRouter(AuthNotifier authNotifier) {
@@ -59,10 +57,6 @@ GoRouter createAppRouter(AuthNotifier authNotifier) {
         builder: (context, state) => const EventosPage(),
       ),
       GoRoute(
-        path: '/comuna',
-        builder: (context, state) => const ComunaPage(),
-      ),
-      GoRoute(
         path: '/estadisticas',
         builder: (context, state) => const EstadisticasPage(),
       ),
@@ -90,37 +84,26 @@ GoRouter createAppRouter(AuthNotifier authNotifier) {
       ),
     ],
     redirect: (context, state) {
-      final authState = authNotifier.authBloc.state; // Use direct reference
+      final authState = authNotifier.authBloc.state;
       final isLoggingIn = state.matchedLocation == '/login';
 
-      print('Router Redirect Check:');
-      print(' - Location: ${state.matchedLocation}');
-      print(' - AuthState: $authState');
-
       if (authState is AuthInitial || authState is AuthLoading) {
-        print(' - Result: null (loading/initial)');
         return null;
       }
 
       if (authState is! AuthAuthenticated) {
-        final result = isLoggingIn ? null : '/login';
-        print(' - Result: $result (not authenticated)');
-        return result;
+        return isLoggingIn ? null : '/login';
       }
 
       if (isLoggingIn) {
-        print(' - Result: /dashboard (authenticated, redirecting from login)');
         return '/dashboard';
       }
 
-      // Check role restrictions
       final userRole = authState.user.role.toLowerCase();
       if (state.matchedLocation == '/administracion' && !userRole.contains('admin')) {
-        print(' - Result: /dashboard (role restricted: $userRole cannot access ${state.matchedLocation})');
         return '/dashboard';
       }
 
-      print(' - Result: null (authenticated, allowed)');
       return null;
     },
   );

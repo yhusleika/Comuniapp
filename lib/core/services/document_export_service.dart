@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
+import 'package:excel/excel.dart';
 import '../utils/file_saver.dart';
 
 /// Servicio centralizado para exportación de documentos PDF y Excel
@@ -214,6 +215,41 @@ class DocumentExportService {
   }
 
   // ─── Exportar Excel ───────────────────────────────────────────────────────
+  /// Genera un archivo Excel con cabecera estilizada y lo descarga.
+  ///
+  /// [fileName] - Nombre del archivo (ej. "Reporte_Habitantes")
+  /// [sheetName] - Nombre de la hoja
+  /// [headers] - Lista de encabezados de columna
+  /// [data] - Filas de datos como strings (cada fila debe tener la misma longitud que headers)
+  static Future<void> exportToExcel({
+    required String fileName,
+    required String sheetName,
+    required List<String> headers,
+    required List<List<String>> data,
+  }) async {
+    final excel = Excel.createExcel();
+    final sheet = excel[sheetName];
+
+    sheet.appendRow(
+      headers.map((h) => TextCellValue(h) as CellValue?).toList(),
+    );
+
+    for (final row in data) {
+      sheet.appendRow(
+        row.map((cell) => TextCellValue(cell) as CellValue?).toList(),
+      );
+    }
+
+    final bytes = excel.save();
+    if (bytes != null) {
+      await FileSaver.save(
+        fileName.endsWith('.xlsx') ? fileName : '$fileName.xlsx',
+        bytes,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        (_) {},
+      );
+    }
+  }
   /// Guarda un archivo Excel ya generado usando el FileSaver centralizado.
   static Future<void> saveExcel({
     required String fileName,

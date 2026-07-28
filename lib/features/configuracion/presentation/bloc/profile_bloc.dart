@@ -22,14 +22,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     );
   }
 
-  void _onToggleEditProfileMode(ToggleEditProfileMode event, Emitter<ProfileState> emit) {
+  Future<void> _onToggleEditProfileMode(ToggleEditProfileMode event, Emitter<ProfileState> emit) async {
     if (state is ProfileLoaded) {
       final currentState = state as ProfileLoaded;
       emit(currentState.copyWith(isEditing: event.isEditing));
     }
   }
 
-  void _onSelectProfileImage(SelectProfileImage event, Emitter<ProfileState> emit) {
+  Future<void> _onSelectProfileImage(SelectProfileImage event, Emitter<ProfileState> emit) async {
     if (state is ProfileLoaded) {
       final currentState = state as ProfileLoaded;
       emit(currentState.copyWith(tempImage: event.imageFile));

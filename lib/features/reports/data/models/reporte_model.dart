@@ -4,45 +4,33 @@ import '../../domain/entities/reporte.dart';
 part 'reporte_model.g.dart';
 
 @HiveType(typeId: 2)
-class ReporteModel extends Reporte {
-  @override
+class ReporteModel extends HiveObject {
   @HiveField(0)
   final String id;
-  @override
   @HiveField(1)
   final String titulo;
-  @override
   @HiveField(2)
   final String descripcion;
-  @override
   @HiveField(3)
   final String tipo;
-  @override
   @HiveField(4)
   final String prioridad;
-  @override
   @HiveField(5)
   final String estatus;
-  @override
   @HiveField(6)
   final List<String> fotosPaths;
-  @override
   @HiveField(7)
   final double latitud;
-  @override
   @HiveField(8)
   final double longitud;
-  @override
   @HiveField(9)
   final String createdBy;
-  @override
   @HiveField(10)
   final DateTime fechaRegistro;
-  @override
   @HiveField(11)
   final bool isSynced;
 
-  const ReporteModel({
+  ReporteModel({
     required this.id,
     required this.titulo,
     required this.descripcion,
@@ -55,20 +43,21 @@ class ReporteModel extends Reporte {
     required this.createdBy,
     required this.fechaRegistro,
     this.isSynced = false,
-  }) : super(
-          id: id,
-          titulo: titulo,
-          descripcion: descripcion,
-          tipo: tipo,
-          prioridad: prioridad,
-          estatus: estatus,
-          fotosPaths: fotosPaths,
-          latitud: latitud,
-          longitud: longitud,
-          createdBy: createdBy,
-          fechaRegistro: fechaRegistro,
-          isSynced: isSynced,
-        );
+  });
+
+  Reporte toEntity() => Reporte(
+        id: id,
+        titulo: titulo,
+        descripcion: descripcion,
+        tipo: tipo,
+        prioridad: prioridad,
+        estatus: estatus,
+        fotosPaths: fotosPaths,
+        latitud: latitud,
+        longitud: longitud,
+        createdBy: createdBy,
+        fechaRegistro: fechaRegistro,
+      );
 
   factory ReporteModel.fromEntity(Reporte reporte) {
     return ReporteModel(
@@ -83,7 +72,23 @@ class ReporteModel extends Reporte {
       longitud: reporte.longitud,
       createdBy: reporte.createdBy,
       fechaRegistro: reporte.fechaRegistro,
-      isSynced: reporte.isSynced,
+    );
+  }
+
+  ReporteModel copyWith({bool? isSynced}) {
+    return ReporteModel(
+      id: id,
+      titulo: titulo,
+      descripcion: descripcion,
+      tipo: tipo,
+      prioridad: prioridad,
+      estatus: estatus,
+      fotosPaths: fotosPaths,
+      latitud: latitud,
+      longitud: longitud,
+      createdBy: createdBy,
+      fechaRegistro: fechaRegistro,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 

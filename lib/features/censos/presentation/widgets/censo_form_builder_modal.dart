@@ -6,7 +6,7 @@ import '../../../../core/utils/user_roles_helper.dart';
 import '../../domain/entities/censo.dart';
 import '../../domain/entities/censo_record.dart';
 import '../../domain/entities/censo_fields_dictionary.dart';
-import '../../../habitants/domain/entities/habitante.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
 import '../bloc/censos_bloc.dart';
 import '../bloc/censos_event.dart';
 

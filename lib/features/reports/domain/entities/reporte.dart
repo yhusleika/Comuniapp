@@ -4,15 +4,14 @@ class Reporte extends Equatable {
   final String id;
   final String titulo;
   final String descripcion;
-  final String tipo; // Agua, Electricidad, Aseo, Otros
-  final String prioridad; // Critica, Alta, Media, Baja
-  final String estatus; // Pendiente, En Proceso, Resuelto
-  final List<String> fotosPaths; // Local paths
+  final String tipo;
+  final String prioridad;
+  final String estatus;
+  final List<String> fotosPaths;
   final double latitud;
   final double longitud;
   final String createdBy;
   final DateTime fechaRegistro;
-  final bool isSynced;
 
   const Reporte({
     required this.id,
@@ -26,9 +25,8 @@ class Reporte extends Equatable {
     this.longitud = 0.0,
     required this.createdBy,
     required this.fechaRegistro,
-    this.isSynced = false,
   });
 
   @override
-  List<Object> get props => [id, titulo, estatus, isSynced];
+  List<Object> get props => [id, titulo, descripcion, tipo, prioridad, estatus, fotosPaths, latitud, longitud, createdBy, fechaRegistro];
 }

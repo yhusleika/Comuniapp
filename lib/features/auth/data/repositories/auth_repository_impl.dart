@@ -68,7 +68,7 @@ class AuthRepositoryImpl implements AuthRepository {
           );
 
           // Guardar credenciales validadas localmente para poder operar offline si se va la red
-          final recoveredBox = await Hive.openBox('recovered_credentials');
+          final recoveredBox = await Hive.openBox(HiveConfig.recoveredCredentialsBox);
           await recoveredBox.put(cleanUsername, cleanPassword);
 
           await localDataSource.cacheUser(user);
@@ -89,7 +89,7 @@ class AuthRepositoryImpl implements AuthRepository {
       }
 
       // 2. Modo Offline (Fallback solo cuando NO hay conexión con el backend)
-      final recoveredBox = await Hive.openBox('recovered_credentials');
+      final recoveredBox = await Hive.openBox(HiveConfig.recoveredCredentialsBox);
       
       // Credenciales default locales si aún no existen
       if (recoveredBox.get('admin') == null) {

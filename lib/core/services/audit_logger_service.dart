@@ -42,6 +42,12 @@ class AuditLoggerService {
     return clean;
   }
 
+  /// Convierte cualquier DateTime (UTC o de cualquier zona horaria) a la hora oficial de Venezuela (VET, UTC-4)
+  static DateTime toVenezuelaTime(DateTime dt) {
+    final utc = dt.isUtc ? dt : dt.toUtc();
+    return utc.subtract(const Duration(hours: 4));
+  }
+
   /// Registra una acción de auditoría con el usuario responsable real y su rol asignado
   Future<void> log(String action) async {
     String user = '';
@@ -79,7 +85,7 @@ class AuditLoggerService {
       user: user,
       role: finalRole,
       action: sanitizeAction(action),
-      dateTime: DateTime.now(),
+      dateTime: toVenezuelaTime(DateTime.now()),
     );
 
     await addAuditLog(newLog);

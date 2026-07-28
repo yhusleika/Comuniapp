@@ -1,75 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:timeline_tile/timeline_tile.dart';
 import 'package:data_table_2/data_table_2.dart';
+import 'package:intl/intl.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
-import 'package:intl/intl.dart';
 import '../../../../core/di/injection_container.dart';
-import '../../../../core/services/mongodb_service.dart';
+import '../bloc/dashboard_bloc.dart';
+import '../../domain/entities/dashboard_stats.dart';
 
-class DashboardPage extends StatefulWidget {
+class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   @override
-  State<DashboardPage> createState() => _DashboardPageState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => sl<DashboardBloc>()..add(const LoadDashboard()),
+      child: const DashboardView(),
+    );
+  }
 }
 
-class _DashboardPageState extends State<DashboardPage> {
-  final scaffoldKey = GlobalKey<ScaffoldState>();
-
-  Map<String, int> _counts = {
-    'Habitantes': 0,
-    'Ayudas': 0,
-    'Censos': 0,
-    'Eventos': 0,
-  };
-
-  List<dynamic> _recentActivity = [];
-  List<dynamic> _realEventos = [];
-  List<dynamic> _realProyectos = [];
-  bool _isLoading = true;
+class DashboardView extends StatefulWidget {
+  const DashboardView({super.key});
 
   @override
-  void initState() {
-    super.initState();
-    _loadStatsAndEvents();
-  }
+  State<DashboardView> createState() => _DashboardViewState();
+}
 
-  Future<void> _loadStatsAndEvents() async {
-    try {
-      final service = sl<MongoDBService>();
-      final data = await service.getStats();
-      final eventosData = await service.getRecords('eventos');
-
-      if (data.isNotEmpty && data['counts'] != null) {
-        final counts = data['counts'];
-        setState(() {
-          _counts = {
-            'Habitantes': counts['habitants'] ?? 0,
-            'Ayudas': counts['ayudas'] ?? 0,
-            'Censos': counts['censos'] ?? 0,
-            'Eventos': counts['eventos'] ?? 0,
-          };
-          
-          // Limitar a máximo 10 actividades recientes
-          _recentActivity = (data['recentActivity'] as List<dynamic>? ?? []).take(10).toList();
-        });
-      }
-
-      if (eventosData.isNotEmpty) {
-        setState(() {
-          _realEventos = eventosData;
-          _realProyectos = eventosData.where((e) => e['category'] == 'Proyectos').toList();
-        });
-      }
-
-      setState(() => _isLoading = false);
-    } catch (e) {
-      debugPrint('Error fetching stats: $e');
-      setState(() => _isLoading = false);
-    }
-  }
+class _DashboardViewState extends State<DashboardView> {
+  final scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _navigateToModule(String module) {
     switch (module) {
@@ -91,13 +52,9 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
-    final int crossAxisCount = screenWidth > 900
-        ? 4
-        : screenWidth > 600
-            ? 3
-            : 2;
+    final int crossAxisCount =
+        screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
     final double childAspectRatio = screenWidth > 1200
         ? 2.5
         : screenWidth > 600
@@ -109,190 +66,259 @@ class _DashboardPageState extends State<DashboardPage> {
     return CustomScaffold(
       scaffoldKey: scaffoldKey,
       drawer: SideMenu(scaffoldKey: scaffoldKey),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Inicio',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 24),
+      child: BlocBuilder<DashboardBloc, DashboardState>(
+        builder: (context, state) {
+          if (state is DashboardLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state is DashboardError) {
+            return Center(child: Text('Error: ${state.message}'));
+          }
+          if (state is! DashboardLoaded) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            // 1. Grid de Indicadores Interctivos (Cards Navegables)
-            GridView.count(
-              crossAxisCount: crossAxisCount,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: childAspectRatio,
+          final stats = state.stats;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _IndicatorCard(
-                  title: 'Ayudas',
-                  value: '${_counts['Ayudas'] ?? 0}',
-                  icon: Icons.volunteer_activism_outlined,
-                  color: Colors.blue,
-                  onTap: () => _navigateToModule('Ayudas'),
+                Text(
+                  'Inicio',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                _IndicatorCard(
-                  title: 'Censos',
-                  value: '${_counts['Censos'] ?? 0}',
-                  icon: Icons.analytics_outlined,
-                  color: Colors.green,
-                  onTap: () => _navigateToModule('Censos'),
-                ),
-                _IndicatorCard(
-                  title: 'Habitantes',
-                  value: '${_counts['Habitantes'] ?? 0}',
-                  icon: Icons.people_outline,
-                  color: Colors.orange,
-                  onTap: () => _navigateToModule('Habitantes'),
-                ),
-                _IndicatorCard(
-                  title: 'Eventos',
-                  value: '${_counts['Eventos'] ?? 0}',
-                  icon: Icons.assignment_outlined,
-                  color: Colors.purple,
-                  onTap: () => _navigateToModule('Eventos'),
-                ),
+                const SizedBox(height: 24),
+                _buildIndicatorGrid(
+                    stats, crossAxisCount, childAspectRatio),
+                const SizedBox(height: 30),
+                _buildTimeline(stats),
+                const SizedBox(height: 30),
+                _buildProjectTable(theme, stats),
+                const SizedBox(height: 30),
+                _buildRecentActivity(theme, stats),
               ],
             ),
-
-            const SizedBox(height: 30),
-
-            // 2. Línea de Tiempo Dinámica (Actividades del Mes)
-            _SectionContainer(
-              title: 'Actividades del Mes',
-              child: _realEventos.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text('No hay actividades registradas para este mes.'),
-                    )
-                  : Column(
-                      children: List.generate(_realEventos.take(5).length, (index) {
-                        final item = _realEventos[index];
-                        final dateStr = item['createdAt'] != null
-                            ? DateFormat('dd MMM').format(DateTime.parse(item['createdAt']).toLocal())
-                            : 'Fecha no estipulada';
-                        final status = item['status'] ?? 'Pendiente';
-
-                        return _TimelineItem(
-                          title: item['name'] ?? 'Actividad sin nombre',
-                          date: dateStr,
-                          isFirst: index == 0,
-                          isLast: index == _realEventos.take(5).length - 1,
-                          status: status,
-                        );
-                      }),
-                    ),
-            ),
-
-            const SizedBox(height: 30),
-
-            // 3. Tabla de Seguimiento de Proyectos (Conectada a DB y Navegable)
-            _SectionContainer(
-              title: 'Seguimiento de Proyectos',
-              child: SizedBox(
-                height: 300,
-                child: _realProyectos.isEmpty
-                    ? const Center(child: Text('No hay proyectos activos registrados.'))
-                    : DataTable2(
-                        columnSpacing: 12,
-                        horizontalMargin: 12,
-                        minWidth: 600,
-                        columns: [
-                          DataColumn2(label: Text('Proyecto', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.L),
-                          DataColumn2(label: Text('Encargado', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.M),
-                          DataColumn2(label: Text('Progreso', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.M),
-                          DataColumn2(label: Text('Estatus', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)), size: ColumnSize.S),
-                        ],
-                        rows: _realProyectos.map((proj) {
-                          final status = proj['status'] ?? 'En Progreso';
-                          final double progress = status == 'Culminado' || status == 'Completado' ? 1.0 : 0.5;
-                          final Color color = status == 'Culminado' || status == 'Completado' ? Colors.green : Colors.blue;
-                          
-                          return DataRow(
-                            onSelectChanged: (_) => context.push('/eventos'),
-                            cells: [
-                              DataCell(Text(proj['name'] ?? 'Proyecto', style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold))),
-                              DataCell(Text(proj['responsible'] ?? 'No asignado', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87))),
-                              DataCell(LinearProgressIndicator(value: progress, backgroundColor: isDark ? Colors.white12 : Colors.black12, color: color)),
-                              DataCell(Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  status,
-                                  style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                              )),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            // 4. Tabla de Actividad Reciente (Máximo 10 registros)
-            _SectionContainer(
-              title: 'Actividad Reciente (Últimas 10)',
-              child: _recentActivity.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: Text('No hay actividad reciente')),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _recentActivity.length,
-                      separatorBuilder: (_, __) => const Divider(),
-                      itemBuilder: (context, index) {
-                        final act = _recentActivity[index];
-                        IconData icon;
-                        Color color;
-                        switch (act['type']) {
-                          case 'habitante':
-                            icon = Icons.person;
-                            color = Colors.orange;
-                            break;
-                          case 'reporte':
-                            icon = Icons.warning;
-                            color = Colors.red;
-                            break;
-                          case 'evento':
-                            icon = Icons.event;
-                            color = Colors.purple;
-                            break;
-                          default:
-                            icon = Icons.info;
-                            color = Colors.blue;
-                        }
-                        
-                        final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(act['date']).toLocal());
-                        
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: color.withOpacity(0.2),
-                            child: Icon(icon, color: color)
-                          ),
-                          title: Text(act['title'], style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
-                          subtitle: Text(act['subtitle'] != null ? '${act['subtitle']} • $dateStr' : dateStr, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildIndicatorGrid(
+      DashboardStats stats, int crossAxisCount, double childAspectRatio) {
+    return GridView.count(
+      crossAxisCount: crossAxisCount,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+      childAspectRatio: childAspectRatio,
+      children: [
+        _IndicatorCard(
+          title: 'Ayudas',
+          value: '${stats.counts['Ayudas'] ?? 0}',
+          icon: Icons.volunteer_activism_outlined,
+          color: Colors.blue,
+          onTap: () => _navigateToModule('Ayudas'),
+        ),
+        _IndicatorCard(
+          title: 'Censos',
+          value: '${stats.counts['Censos'] ?? 0}',
+          icon: Icons.analytics_outlined,
+          color: Colors.green,
+          onTap: () => _navigateToModule('Censos'),
+        ),
+        _IndicatorCard(
+          title: 'Habitantes',
+          value: '${stats.counts['Habitantes'] ?? 0}',
+          icon: Icons.people_outline,
+          color: Colors.orange,
+          onTap: () => _navigateToModule('Habitantes'),
+        ),
+        _IndicatorCard(
+          title: 'Eventos',
+          value: '${stats.counts['Eventos'] ?? 0}',
+          icon: Icons.assignment_outlined,
+          color: Colors.purple,
+          onTap: () => _navigateToModule('Eventos'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeline(DashboardStats stats) {
+    return _SectionContainer(
+      title: 'Actividades del Mes',
+      child: stats.eventos.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text('No hay actividades registradas para este mes.'),
+            )
+          : Column(
+              children: List.generate(
+                  stats.eventos.take(5).length, (index) {
+                final item = stats.eventos[index];
+                final dateStr = DateFormat('dd MMM')
+                    .format(item.createdAt.toLocal());
+                return _TimelineItem(
+                  title: item.name,
+                  date: dateStr,
+                  isFirst: index == 0,
+                  isLast: index == stats.eventos.take(5).length - 1,
+                  status: item.status,
+                );
+              }),
+            ),
+    );
+  }
+
+  Widget _buildProjectTable(ThemeData theme, DashboardStats stats) {
+    final isDark = theme.brightness == Brightness.dark;
+    final proyectos = stats.proyectos;
+
+    return _SectionContainer(
+      title: 'Seguimiento de Proyectos',
+      child: SizedBox(
+        height: 300,
+        child: proyectos.isEmpty
+            ? const Center(child: Text('No hay proyectos activos registrados.'))
+            : DataTable2(
+                columnSpacing: 12,
+                horizontalMargin: 12,
+                minWidth: 600,
+                columns: [
+                  DataColumn2(
+                      label: Text('Proyecto',
+                          style: TextStyle(
+                              color: isDark ? Colors.white70 : Colors.black87)),
+                      size: ColumnSize.L),
+                  DataColumn2(
+                      label: Text('Encargado',
+                          style: TextStyle(
+                              color: isDark ? Colors.white70 : Colors.black87)),
+                      size: ColumnSize.M),
+                  DataColumn2(
+                      label: Text('Progreso',
+                          style: TextStyle(
+                              color: isDark ? Colors.white70 : Colors.black87)),
+                      size: ColumnSize.M),
+                  DataColumn2(
+                      label: Text('Estatus',
+                          style: TextStyle(
+                              color: isDark ? Colors.white70 : Colors.black87)),
+                      size: ColumnSize.S),
+                ],
+                rows: proyectos.map((proj) {
+                  final status = proj.status;
+                  final double progress = status == 'Culminado' ||
+                          status == 'Completado'
+                      ? 1.0
+                      : 0.5;
+                  final Color color = status == 'Culminado' ||
+                          status == 'Completado'
+                      ? Colors.green
+                      : Colors.blue;
+                  return DataRow(
+                    onSelectChanged: (_) => context.push('/eventos'),
+                    cells: [
+                      DataCell(Text(proj.name,
+                          style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.bold))),
+                      DataCell(Text(proj.responsible ?? 'No asignado',
+                          style: TextStyle(
+                              color:
+                                  isDark ? Colors.white70 : Colors.black87))),
+                      DataCell(LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor:
+                              isDark ? Colors.white12 : Colors.black12,
+                          color: color)),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          status,
+                          style: TextStyle(
+                              color: color,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      )),
+                    ],
+                  );
+                }).toList(),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildRecentActivity(ThemeData theme, DashboardStats stats) {
+    final isDark = theme.brightness == Brightness.dark;
+
+    return _SectionContainer(
+      title: 'Actividad Reciente (Últimas 10)',
+      child: stats.recentActivity.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: Text('No hay actividad reciente')),
+            )
+          : ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: stats.recentActivity.length,
+              separatorBuilder: (_, __) => const Divider(),
+              itemBuilder: (context, index) {
+                final act = stats.recentActivity[index];
+                IconData icon;
+                Color color;
+                switch (act.type) {
+                  case 'habitante':
+                    icon = Icons.person;
+                    color = Colors.orange;
+                    break;
+                  case 'reporte':
+                    icon = Icons.warning;
+                    color = Colors.red;
+                    break;
+                  case 'evento':
+                    icon = Icons.event;
+                    color = Colors.purple;
+                    break;
+                  default:
+                    icon = Icons.info;
+                    color = Colors.blue;
+                }
+
+                final dateStr = DateFormat('dd MMM yyyy, hh:mm a')
+                    .format(act.date.toLocal());
+
+                return ListTile(
+                  leading: CircleAvatar(
+                      backgroundColor: color.withOpacity(0.2),
+                      child: Icon(icon, color: color)),
+                  title: Text(act.title,
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                      act.subtitle != null
+                          ? '${act.subtitle} • $dateStr'
+                          : dateStr,
+                      style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black54)),
+                );
+              },
+            ),
     );
   }
 }
@@ -403,7 +429,8 @@ class _SectionContainer extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
+        border: Border.all(
+            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
@@ -454,10 +481,13 @@ class _TimelineItem extends StatelessWidget {
       child: TimelineTile(
         isFirst: isFirst,
         isLast: isLast,
-        beforeLineStyle: LineStyle(color: isDark ? Colors.white24 : Colors.black12),
+        beforeLineStyle:
+            LineStyle(color: isDark ? Colors.white24 : Colors.black12),
         indicatorStyle: IndicatorStyle(
           width: 30,
-          color: status == 'Culminado' || status == 'Completado' ? Colors.green : Colors.blue,
+          color: status == 'Culminado' || status == 'Completado'
+              ? Colors.green
+              : Colors.blue,
           iconStyle: status == 'Culminado' || status == 'Completado'
               ? IconStyle(iconData: Icons.check, color: Colors.white)
               : null,

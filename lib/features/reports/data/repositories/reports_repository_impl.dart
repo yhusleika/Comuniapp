@@ -35,9 +35,9 @@ class ReportsRepositoryImpl implements ReportsRepository {
         }
       }
 
-      final reports = await localDataSource.getReports();
-      return Right(reports);
-    } catch (e) {
+      final models = await localDataSource.getReports();
+      return Right(models.map((m) => m.toEntity()).toList());
+    } on Exception catch (e) {
       return Left(CacheFailure(e.toString()));
     }
   }
@@ -51,27 +51,20 @@ class ReportsRepositoryImpl implements ReportsRepository {
       final model = ReporteModel.fromEntity(reporte);
       
       if (isConnected) {
-        apiSynced = await mongoDBService.createRecord('reports', model.toJson());
+        try {
+          apiSynced = await mongoDBService.createRecord('reports', model.toJson());
+        } on Exception catch (e) {
+          return Left(ServerFailure(e.toString()));
+        }
       }
       
-      final cacheModel = ReporteModel(
-        id: model.id,
-        titulo: model.titulo,
-        descripcion: model.descripcion,
-        tipo: model.tipo,
-        prioridad: model.prioridad,
-        estatus: model.estatus,
-        fotosPaths: model.fotosPaths,
-        latitud: model.latitud,
-        longitud: model.longitud,
-        createdBy: model.createdBy,
-        fechaRegistro: model.fechaRegistro,
-        isSynced: apiSynced,
-      );
-      
-      await localDataSource.cacheReporte(cacheModel);
+      try {
+        await localDataSource.cacheReporte(model.copyWith(isSynced: apiSynced));
+      } on Exception catch (e) {
+        return Left(CacheFailure(e.toString()));
+      }
       return const Right(null);
-    } catch (e) {
+    } on Exception catch (e) {
       return Left(CacheFailure(e.toString()));
     }
   }
@@ -79,9 +72,9 @@ class ReportsRepositoryImpl implements ReportsRepository {
   @override
   Future<Either<Failure, List<Reporte>>> getUnsyncedReports() async {
     try {
-      final reports = await localDataSource.getReports();
-      return Right(reports.where((element) => !element.isSynced).toList());
-    } catch (e) {
+      final models = await localDataSource.getReports();
+      return Right(models.where((m) => !m.isSynced).map((m) => m.toEntity()).toList());
+    } on Exception catch (e) {
       return Left(CacheFailure(e.toString()));
     }
   }
@@ -89,28 +82,13 @@ class ReportsRepositoryImpl implements ReportsRepository {
   @override
   Future<Either<Failure, void>> markAsSynced(String id) async {
     try {
-      final reports = await localDataSource.getReports();
-      final index = reports.indexWhere((r) => r.id == id);
+      final models = await localDataSource.getReports();
+      final index = models.indexWhere((m) => m.id == id);
       if (index != -1) {
-        final reporte = reports[index];
-        final updated = ReporteModel(
-          id: reporte.id,
-          titulo: reporte.titulo,
-          descripcion: reporte.descripcion,
-          tipo: reporte.tipo,
-          prioridad: reporte.prioridad,
-          estatus: reporte.estatus,
-          fotosPaths: reporte.fotosPaths,
-          latitud: reporte.latitud,
-          longitud: reporte.longitud,
-          createdBy: reporte.createdBy,
-          fechaRegistro: reporte.fechaRegistro,
-          isSynced: true,
-        );
-        await localDataSource.cacheReporte(updated);
+        await localDataSource.cacheReporte(models[index].copyWith(isSynced: true));
       }
       return const Right(null);
-    } catch (e) {
+    } on Exception catch (e) {
       return Left(CacheFailure(e.toString()));
     }
   }

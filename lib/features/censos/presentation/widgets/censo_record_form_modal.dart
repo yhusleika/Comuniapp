@@ -5,9 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../../domain/entities/censo.dart';
 import '../../domain/entities/censo_record.dart';
 import '../../domain/entities/censo_fields_dictionary.dart';
-import '../../../habitants/domain/entities/habitante.dart';
-import '../../../habitants/presentation/widgets/search_habitante_modal.dart';
-import '../../../habitants/presentation/bloc/habitants_bloc.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
+import '../../../habitantes/presentation/widgets/search_habitante_modal.dart';
+import '../../../habitantes/presentation/bloc/habitants_bloc.dart';
 import '../bloc/censos_bloc.dart';
 import '../bloc/censos_event.dart';
 

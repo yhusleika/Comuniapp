@@ -1,9 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hive/hive.dart';
-import 'hive_config.dart';
-import '../../features/auth/data/models/user_model.dart';
 
 class MongoDBService {
   final Dio _dio;
@@ -36,52 +33,24 @@ class MongoDBService {
 
   MongoDBService({Dio? dio}) : _dio = dio ?? Dio(BaseOptions(
     baseUrl: _defaultBaseUrl,
-    // Timeouts más largos para el tier gratuito de Render (cold start ~30s)
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 30),
   )) {
-    debugPrint('🌐 API Base URL: ${_dio.options.baseUrl}');
-    
-    // Interceptor para autenticación mediante JWT y logs
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        debugPrint('=== API REQUEST ===');
-        debugPrint('-> [${options.method}] ${options.baseUrl}${options.path}');
-        
         try {
           const storage = FlutterSecureStorage();
           final token = await storage.read(key: 'jwt_token');
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
-            debugPrint('Injected Authorization Bearer Token');
           }
-          if (Hive.isBoxOpen(HiveConfig.userBox)) {
-            final box = Hive.box(HiveConfig.userBox);
-            final user = box.get('current_user');
-            if (user != null && user is UserModel) {
-              options.headers['x-user-role'] = user.role;
-              options.headers['x-username'] = user.username;
-            }
-          }
-        } catch (e) {
-          debugPrint('Error obteniendo token en Interceptor: $e');
-        }
-
-        if (options.data != null) {
-          debugPrint('Payload: ${options.data}');
-        }
+        } catch (_) {}
         handler.next(options);
       },
       onResponse: (response, handler) {
-        debugPrint('=== API RESPONSE ===');
-        debugPrint('<- [${response.statusCode}] ${response.requestOptions.path}');
-        debugPrint('Data: ${response.data}');
         handler.next(response);
       },
       onError: (DioException e, handler) {
-        debugPrint('=== API ERROR ===');
-        debugPrint('Error: ${e.message}');
-        debugPrint('URL: ${e.requestOptions.baseUrl}${e.requestOptions.path}');
         handler.next(e);
       }
     ));
@@ -91,8 +60,7 @@ class MongoDBService {
     try {
       final response = await _dio.post('/$collection', data: data);
       return response.statusCode == 201 || response.statusCode == 200;
-    } catch (e) {
-      debugPrint('MongoDB Remote API Error: $e');
+    } catch (_) {
       return false;
     }
   }
@@ -101,8 +69,7 @@ class MongoDBService {
     try {
       final response = await _dio.put('/$collection/$id', data: data);
       return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('MongoDB Remote API Error: $e');
+    } catch (_) {
       return false;
     }
   }
@@ -111,21 +78,19 @@ class MongoDBService {
     try {
       final response = await _dio.delete('/$collection/$id');
       return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('MongoDB Remote API Error: $e');
+    } catch (_) {
       return false;
     }
   }
 
-  Future<List<dynamic>> getRecords(String collection) async {
+  Future<List<dynamic>> getRecords(String collection, {Map<String, dynamic>? queryParameters}) async {
     try {
-      final response = await _dio.get('/$collection');
+      final response = await _dio.get('/$collection', queryParameters: queryParameters);
       if (response.data != null && response.data['data'] != null) {
         return response.data['data'] as List<dynamic>;
       }
       return [];
-    } catch (e) {
-      debugPrint('MongoDB Remote API Error: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -137,8 +102,7 @@ class MongoDBService {
         return response.data['data'] as Map<String, dynamic>;
       }
       return {};
-    } catch (e) {
-      debugPrint('MongoDB Remote API Error: $e');
+    } catch (_) {
       return {};
     }
   }

@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Comuniapp necesita acceso a la cámara para tomar fotos de reportes y eventos</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Comuniapp necesita acceso a la galería para seleccionar imágenes</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Comuniapp necesita guardar imágenes en tu galería</string>
 </dict>
 </plist>

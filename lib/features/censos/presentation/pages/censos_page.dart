@@ -6,8 +6,8 @@ import '../../../../core/utils/file_saver.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../../../../shared/widgets/side_menu.dart';
-import '../../../habitants/presentation/bloc/habitants_bloc.dart';
-import '../../../habitants/domain/entities/habitante.dart';
+import '../../../habitantes/presentation/bloc/habitants_bloc.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../bloc/censos_bloc.dart';
 import '../bloc/censos_event.dart';
@@ -20,7 +20,8 @@ import '../widgets/censo_form_builder_modal.dart';
 import '../widgets/censo_record_form_modal.dart';
 
 class CensosPage extends StatelessWidget {
-  const CensosPage({super.key});
+  final bool embedded;
+  const CensosPage({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
@@ -31,14 +32,15 @@ class CensosPage extends StatelessWidget {
       ],
       child: ChangeNotifierProvider(
         create: (_) => CensosNotifier(),
-        child: const CensosView(),
+        child: CensosView(embedded: embedded),
       ),
     );
   }
 }
 
 class CensosView extends StatefulWidget {
-  const CensosView({super.key});
+  final bool embedded;
+  const CensosView({super.key, this.embedded = false});
 
   @override
   State<CensosView> createState() => _CensosViewState();
@@ -68,10 +70,7 @@ class _CensosViewState extends State<CensosView> {
     final canEdit = !isVisor && (isOperador || isAdmin);
     final canDelete = isAdmin;
 
-    return CustomScaffold(
-      scaffoldKey: scaffoldKey,
-      drawer: SideMenu(scaffoldKey: scaffoldKey),
-      child: BlocListener<CensosBloc, CensosState>(
+    final body = BlocListener<CensosBloc, CensosState>(
         listener: (context, state) {
           if (state is CensosLoaded) {
             final oldLen = _notifier!.censos.length;
@@ -119,7 +118,13 @@ class _CensosViewState extends State<CensosView> {
             ],
           ),
         ),
-      ),
+    );
+
+    if (widget.embedded) return body;
+    return CustomScaffold(
+      scaffoldKey: scaffoldKey,
+      drawer: SideMenu(scaffoldKey: scaffoldKey),
+      child: body,
     );
   }
 

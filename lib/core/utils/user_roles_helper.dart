@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../services/mongodb_service.dart';
 import '../services/hive_config.dart';
@@ -105,5 +106,36 @@ class UserRolesHelper {
       'María Rodríguez',
       'Juan Pérez',
     ];
+  }
+
+  static Color getRoleColor(String role) {
+    switch (role.toLowerCase()) {
+      case 'administrador':
+        return Colors.red.shade700;
+      case 'operador':
+        return Colors.blue.shade700;
+      default:
+        return Colors.grey.shade700;
+    }
+  }
+
+  static IconData getRoleIcon(String role) {
+    switch (role) {
+      case 'Administrador':
+        return Icons.shield;
+      case 'Operador':
+        return Icons.engineering;
+      default:
+        return Icons.visibility;
+    }
+  }
+
+  static Widget roleChip(String role) {
+    final color = getRoleColor(role);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(role, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+    );
   }
 }

@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'comuniapp_secret_key_change_in_production_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET no configurado. Defínalo en las variables de entorno.');
+}
 
 const verifyToken = (req, res, next) => {
     // Permitir preflight requests OPTIONS del navegador (CORS)
@@ -9,37 +12,17 @@ const verifyToken = (req, res, next) => {
     }
 
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer <TOKEN>"
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-        const fallbackUsername = req.headers['x-username'];
-        const fallbackRole = req.headers['x-user-role'];
-        if (fallbackUsername || fallbackRole) {
-            req.user = {
-                id: fallbackUsername || 'user_local',
-                username: fallbackUsername || 'usuario',
-                role: fallbackRole || 'operador'
-            };
-            return next();
-        }
         return res.status(401).json({ success: false, error: 'Acceso denegado. Token no proporcionado.' });
     }
 
     try {
         const verified = jwt.verify(token, JWT_SECRET);
-        req.user = verified; // { id, username, role, iat, exp }
+        req.user = verified;
         next();
     } catch (error) {
-        const fallbackUsername = req.headers['x-username'];
-        const fallbackRole = req.headers['x-user-role'];
-        if (fallbackUsername || fallbackRole) {
-            req.user = {
-                id: fallbackUsername || 'user_local',
-                username: fallbackUsername || 'usuario',
-                role: fallbackRole || 'operador'
-            };
-            return next();
-        }
         return res.status(403).json({ success: false, error: 'Token inválido o expirado.' });
     }
 };

@@ -8,6 +8,7 @@ import '../../../../core/services/mongodb_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/utils/user_roles_helper.dart';
 import '../../../../core/services/audit_logger_service.dart';
+import '../../../censos/domain/entities/censo_fields_dictionary.dart';
 
 class SystemUser {
   final String id;
@@ -124,6 +125,8 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
 
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  String _templateSearchQuery = '';
+  final _templateSearchController = TextEditingController();
 
   @override
   void initState() {
@@ -133,6 +136,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
 
   Future<void> _loadInitialData() async {
     setState(() => _isLoadingUsers = true);
+    await CensoDictionary.loadTemplateFromStorage();
 
     final mongoService = sl<MongoDBService>();
     final sectoresBox = await Hive.openBox('sectores_box');
@@ -290,6 +294,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _templateSearchController.dispose();
     super.dispose();
   }
 
@@ -945,7 +950,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
     return CustomScaffold(
       drawer: SideMenu(scaffoldKey: scaffoldKey),
       child: DefaultTabController(
-        length: 3,
+        length: 4,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -963,7 +968,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Gestión de usuarios, perfiles de acceso y administración de sectores comunitarios',
+                    'Gestión de usuarios, perfiles de acceso, sectores comunitarios y plantillas de censo',
                     style: TextStyle(
                         color: Colors.white70,
                         fontSize: 15,
@@ -1015,6 +1020,11 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                           icon: Icon(Icons.map_outlined, size: 18),
                           text: 'Gestión de Sectores',
                         ),
+                        Tab(
+                          iconMargin: EdgeInsets.only(bottom: 2),
+                          icon: Icon(Icons.assignment_outlined, size: 18),
+                          text: 'Plantillas de Censo',
+                        ),
                       ],
                     ),
                     Expanded(
@@ -1023,6 +1033,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                           _buildUsersTab(theme),
                           _buildRolesTab(theme),
                           _buildSectoresTab(theme),
+                          _buildCensoPlantillaTab(theme),
                         ],
                       ),
                     ),
@@ -1139,7 +1150,7 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                           DataColumn2(label: Text('Correo Electrónico', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.L),
                           DataColumn2(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
                           DataColumn2(label: Text('Estatus', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.M),
-                          DataColumn2(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.S, fixedWidth: 100),
+                          DataColumn2(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold)), size: ColumnSize.S, fixedWidth: 110),
                         ],
                         rows: _filteredUsers.map((u) {
                           final isBlocked = u.status == 'Bloqueado';
@@ -1308,18 +1319,24 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
             children: [
               const Text(
                 'Sectores Comunitarios',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
-              ElevatedButton.icon(
+              IconButton.filled(
                 onPressed: () => _showSectorModal(),
                 icon: const Icon(Icons.add),
-                label: const Text('Agregar Sector'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF416FDF), foregroundColor: Colors.white),
+                tooltip: 'Agregar Sector',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF416FDF),
+                  foregroundColor: Colors.white,
+                ),
               ),
             ],
           ),
@@ -1373,6 +1390,599 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
                 ),
               );
             }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getFieldTypeName(FieldType type) {
+    switch (type) {
+      case FieldType.text:
+        return 'Texto';
+      case FieldType.number:
+        return 'Número';
+      case FieldType.date:
+        return 'Fecha';
+      case FieldType.dropdown:
+        return 'Desplegable (Único)';
+      case FieldType.checkboxList:
+        return 'Selección Múltiple';
+      case FieldType.radio:
+        return 'Opción Única (Radio)';
+      case FieldType.checkboxListWithQuantity:
+        return 'Selección con Cantidad';
+    }
+  }
+
+  Widget _buildCensoPlantillaTab(ThemeData theme) {
+    final categorized = CensoDictionary.getCategorizedFields();
+    final categories = CensoDictionary.getCategories();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            color: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Colors.black12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    child: TextField(
+                      controller: _templateSearchController,
+                      onChanged: (val) => setState(() => _templateSearchQuery = val),
+                      style: const TextStyle(color: Colors.black87),
+                      decoration: InputDecoration(
+                        hintText: 'Buscar campo o categoría...',
+                        hintStyle: const TextStyle(color: Colors.black38),
+                        prefixIcon: Icon(Icons.search, color: theme.colorScheme.primary),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Colors.black12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _showCategoryModal(),
+                        icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+                        label: const Text('Nuevo Grupo'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF416FDF),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _showFieldModal(),
+                        icon: const Icon(Icons.add_task, size: 18),
+                        label: const Text('Nuevo Campo'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _confirmResetTemplate,
+                        icon: const Icon(Icons.restore, size: 18, color: Colors.orange),
+                        label: const Text('Restablecer Plantilla', style: TextStyle(color: Colors.orange)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          ...categories.map((category) {
+            var fieldsInCategory = categorized[category] ?? [];
+            if (_templateSearchQuery.isNotEmpty) {
+              fieldsInCategory = fieldsInCategory.where((f) {
+                return f.label.toLowerCase().contains(_templateSearchQuery.toLowerCase()) ||
+                    f.id.toLowerCase().contains(_templateSearchQuery.toLowerCase()) ||
+                    f.category.toLowerCase().contains(_templateSearchQuery.toLowerCase());
+              }).toList();
+              if (fieldsInCategory.isEmpty && !category.toLowerCase().contains(_templateSearchQuery.toLowerCase())) {
+                return const SizedBox.shrink();
+              }
+            }
+
+            return Card(
+              color: Colors.white,
+              elevation: 2,
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Colors.black12),
+              ),
+              child: Theme(
+                data: theme.copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: ValueKey<String>('category_tile_$category'),
+                  initiallyExpanded: _templateSearchQuery.isNotEmpty,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  title: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.folder_open, color: Color(0xFF416FDF), size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          category,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Chip(
+                          backgroundColor: const Color(0xFF416FDF).withOpacity(0.08),
+                          side: BorderSide.none,
+                          label: Text(
+                            '${fieldsInCategory.length} campos',
+                            style: const TextStyle(
+                              color: Color(0xFF416FDF),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                          tooltip: 'Renombrar grupo',
+                          onPressed: () => _showCategoryModal(oldCategoryName: category),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                          tooltip: 'Eliminar grupo completo',
+                          onPressed: () => _confirmDeleteCategory(category),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline, color: Colors.teal, size: 20),
+                          tooltip: 'Agregar campo a este grupo',
+                          onPressed: () => _showFieldModal(initialCategory: category),
+                        ),
+                      ],
+                    ),
+                  ),
+                  children: [
+                    const Divider(color: Colors.black12, height: 1),
+                    const SizedBox(height: 12),
+                    if (fieldsInCategory.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12.0),
+                        child: Text(
+                          'No hay campos registrados en este grupo. Presione "+" para agregar uno.',
+                          style: TextStyle(color: Colors.black45, fontStyle: FontStyle.italic),
+                        ),
+                      )
+                    else
+                      SingleChildScrollView(
+                        key: ValueKey<String>('category_scroll_$category'),
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          columnSpacing: 16,
+                          horizontalMargin: 8,
+                          columns: const [
+                            DataColumn(label: Text('Campo / Etiqueta', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Identificador (ID)', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Tipo de Dato', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Requerido', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Opciones Configuradas', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
+                          ],
+                          rows: fieldsInCategory.map((f) {
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(f.label, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                DataCell(Text(f.id, style: const TextStyle(color: Colors.black54, fontFamily: 'monospace', fontSize: 12))),
+                                DataCell(Chip(
+                                  backgroundColor: Colors.grey.shade100,
+                                  label: Text(_getFieldTypeName(f.type), style: const TextStyle(fontSize: 11)),
+                                )),
+                                DataCell(Chip(
+                                  backgroundColor: f.isRequired ? Colors.red.shade50 : Colors.green.shade50,
+                                  label: Text(
+                                    f.isRequired ? 'Sí' : 'No',
+                                    style: TextStyle(color: f.isRequired ? Colors.red : Colors.green, fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                )),
+                                DataCell(
+                                  f.options != null && f.options!.isNotEmpty
+                                      ? SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: Row(
+                                            children: <Widget>[
+                                              ...f.options!.take(3).map((o) => Padding(
+                                                padding: const EdgeInsets.only(right: 4.0),
+                                                child: Chip(
+                                                  padding: EdgeInsets.zero,
+                                                  label: Text(o, style: const TextStyle(fontSize: 10)),
+                                                ),
+                                              )),
+                                              if (f.options!.length > 3)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(left: 2.0),
+                                                  child: Text(' +${f.options!.length - 3}', style: const TextStyle(fontSize: 10, color: Colors.black45)),
+                                                ),
+                                            ],
+                                          ),
+                                        )
+                                      : const Text('-', style: TextStyle(color: Colors.black38)),
+                                ),
+                                DataCell(
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                                        onPressed: () => _showFieldModal(field: f),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                                        onPressed: () => _confirmDeleteField(f),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  void _showCategoryModal({String? oldCategoryName}) {
+    final catCtrl = TextEditingController(text: oldCategoryName ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  oldCategoryName != null ? 'Renombrar Grupo de Censo' : 'Nuevo Grupo / Categoría',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF416FDF)),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: catCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del Grupo / Categoría *',
+                    hintText: 'Ej. Servicios de Gas, Mascotas',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'El nombre es obligatorio' : null,
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF416FDF), foregroundColor: Colors.white),
+                      onPressed: () async {
+                        if (formKey.currentState!.validate()) {
+                          final newName = catCtrl.text.trim();
+                          if (oldCategoryName != null && oldCategoryName != newName) {
+                            final categorized = CensoDictionary.getCategorizedFields();
+                            final fields = categorized[oldCategoryName] ?? [];
+                            for (var f in fields) {
+                              await CensoDictionary.addOrUpdateField(f.copyWith(category: newName));
+                            }
+                            await CensoDictionary.deleteCategory(oldCategoryName);
+                          } else {
+                            await CensoDictionary.addCategory(newName);
+                          }
+                          sl<AuditLoggerService>().log('Guardó el grupo de censo "$newName"');
+                          if (mounted) {
+                            setState(() {});
+                            Navigator.pop(dialogCtx);
+                          }
+                        }
+                      },
+                      child: const Text('Guardar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteCategory(String categoryName) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Eliminar Grupo'),
+          ],
+        ),
+        content: Text('¿Está seguro de eliminar el grupo "$categoryName" y todos los campos contenidos en él?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              await CensoDictionary.deleteCategory(categoryName);
+              sl<AuditLoggerService>().log('Eliminó el grupo de censo "$categoryName"');
+              if (mounted) {
+                setState(() {});
+                Navigator.pop(dialogCtx);
+              }
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFieldModal({String? initialCategory, CensoFieldDef? field}) {
+    final labelCtrl = TextEditingController(text: field?.label ?? '');
+    final idCtrl = TextEditingController(text: field?.id ?? '');
+    final optionsCtrl = TextEditingController(text: field?.options?.join(', ') ?? '');
+    
+    final categories = CensoDictionary.getCategories();
+    String selectedCategory = field?.category ?? initialCategory ?? (categories.isNotEmpty ? categories.first : 'General');
+    FieldType selectedType = field?.type ?? FieldType.text;
+    bool isRequired = field?.isRequired ?? false;
+
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final showOptions = selectedType == FieldType.dropdown ||
+              selectedType == FieldType.checkboxList ||
+              selectedType == FieldType.radio ||
+              selectedType == FieldType.checkboxListWithQuantity;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 500),
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        field != null ? 'Editar Campo de Censo' : 'Nuevo Campo de Censo',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF416FDF)),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: labelCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nombre / Etiqueta del Campo *',
+                          hintText: 'Ej. Tipo de Bombona, Marca de Vehículo',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                        onChanged: (val) {
+                          if (field == null && idCtrl.text.isEmpty) {
+                            idCtrl.text = val.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: idCtrl,
+                        readOnly: field != null,
+                        decoration: InputDecoration(
+                          labelText: 'Identificador Interno (ID / Key) *',
+                          hintText: 'Ej. tipo_bombona',
+                          border: const OutlineInputBorder(),
+                          fillColor: field != null ? Colors.grey.shade100 : Colors.white,
+                          filled: field != null,
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: Colors.white,
+                        value: categories.contains(selectedCategory) ? selectedCategory : (categories.isNotEmpty ? categories.first : 'General'),
+                        decoration: const InputDecoration(labelText: 'Grupo / Categoría *', border: OutlineInputBorder()),
+                        items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                        onChanged: (val) => setModalState(() => selectedCategory = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<FieldType>(
+                        dropdownColor: Colors.white,
+                        value: selectedType,
+                        decoration: const InputDecoration(labelText: 'Tipo de Campo *', border: OutlineInputBorder()),
+                        items: FieldType.values
+                            .map((ft) => DropdownMenuItem(value: ft, child: Text(_getFieldTypeName(ft))))
+                            .toList(),
+                        onChanged: (val) => setModalState(() => selectedType = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      if (showOptions) ...[
+                        TextFormField(
+                          controller: optionsCtrl,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'Opciones (Separadas por comas) *',
+                            hintText: 'Ej. Opción 1, Opción 2, Opción 3',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) {
+                            if (showOptions && (v == null || v.trim().isEmpty)) {
+                              return 'Ingrese al menos una opción';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      CheckboxListTile(
+                        title: const Text('Campo Obligatorio (Requerido)'),
+                        value: isRequired,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (val) => setModalState(() => isRequired = val == true),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF416FDF), foregroundColor: Colors.white),
+                            onPressed: () async {
+                              if (formKey.currentState!.validate()) {
+                                final newField = CensoFieldDef(
+                                  id: idCtrl.text.trim().replaceAll(' ', '_').toLowerCase(),
+                                  label: labelCtrl.text.trim(),
+                                  category: selectedCategory,
+                                  type: selectedType,
+                                  options: showOptions
+                                      ? optionsCtrl.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+                                      : null,
+                                  isRequired: isRequired,
+                                );
+
+                                await CensoDictionary.addOrUpdateField(newField);
+                                sl<AuditLoggerService>().log('Guardó el campo de censo "${newField.label}"');
+                                if (mounted) {
+                                  setState(() {});
+                                  Navigator.pop(dialogCtx);
+                                }
+                              }
+                            },
+                            child: const Text('Guardar Campo'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmDeleteField(CensoFieldDef field) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Eliminar Campo'),
+          ],
+        ),
+        content: Text('¿Está seguro de eliminar el campo "${field.label}" de la plantilla?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              await CensoDictionary.deleteField(field.id);
+              sl<AuditLoggerService>().log('Eliminó el campo de censo "${field.label}"');
+              if (mounted) {
+                setState(() {});
+                Navigator.pop(dialogCtx);
+              }
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmResetTemplate() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.restore, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Restablecer Plantilla'),
+          ],
+        ),
+        content: const Text('¿Está seguro de restablecer la plantilla a la versión original de fábrica? Se descartarán las categorías y campos personalizados.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            onPressed: () async {
+              await CensoDictionary.resetToDefaults();
+              sl<AuditLoggerService>().log('Restableció la plantilla de censo por defecto');
+              if (mounted) {
+                setState(() {});
+                Navigator.pop(dialogCtx);
+              }
+            },
+            child: const Text('Restablecer'),
           ),
         ],
       ),

@@ -3,7 +3,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../middleware/auth.middleware');
 
-// Registro de nuevos usuarios con contraseña hasheada
 const register = async (req, res) => {
     try {
         const { username, password, role, nombres, apellidos, cedula, email, telefono } = req.body;
@@ -12,18 +11,17 @@ const register = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Usuario y contraseña son requeridos' });
         }
 
-        const existingUser = await User.findOne({ username: username });
+        const cleanUsername = username.toLowerCase().trim();
+        const existingUser = await User.findOne({ username: cleanUsername });
         if (existingUser) {
             return res.status(400).json({ success: false, error: 'El nombre de usuario ya está registrado' });
         }
 
-        // Hashing seguro de contraseña con bcrypt
-        const salt = await bcrypt.genSalt(12);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, 12);
 
         const newUser = new User({
             id: `usr_${Date.now()}`,
-            username,
+            username: cleanUsername,
             role: role || 'vocero',
             nombres: nombres || '',
             apellidos: apellidos || '',
@@ -35,7 +33,6 @@ const register = async (req, res) => {
 
         await newUser.save();
 
-        // Emitir Token JWT
         const token = jwt.sign(
             { id: newUser.id, username: newUser.username, role: newUser.role },
             JWT_SECRET,
@@ -60,7 +57,6 @@ const register = async (req, res) => {
     }
 };
 
-// Login de usuario con verificación estricta de hash en MongoDB y emisión de JWT
 const login = async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -72,29 +68,18 @@ const login = async (req, res) => {
         const cleanUsername = username.trim().toLowerCase();
         const cleanPassword = password.trim();
 
-        // Buscar usuario estrictamente en la base de datos MongoDB
         const user = await User.findOne({ username: cleanUsername });
 
         if (!user) {
             return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrectos' });
         }
 
-        // Verificar la contraseña usando bcrypt
-        let validPassword = await bcrypt.compare(cleanPassword, user.passwordHash);
-
-        // Si la contraseña guardada era en texto plano (migración legacy), verificar y actualizar a hash bcrypt
-        if (!validPassword && user.passwordHash === cleanPassword) {
-            const salt = await bcrypt.genSalt(12);
-            user.passwordHash = await bcrypt.hash(cleanPassword, salt);
-            await user.save();
-            validPassword = true;
-        }
+        const validPassword = await bcrypt.compare(cleanPassword, user.passwordHash);
 
         if (!validPassword) {
             return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrectos' });
         }
 
-        // Generar Token JWT
         const token = jwt.sign(
             { id: user.id, username: user.username, role: user.role },
             JWT_SECRET,

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
-import '../../features/habitants/domain/repositories/habitants_repository.dart';
-import '../../features/habitants/data/models/habitante_model.dart';
+import '../../features/habitantes/domain/repositories/habitants_repository.dart';
+import '../../features/habitantes/data/models/habitante_model.dart';
 import '../../features/reports/domain/repositories/reports_repository.dart';
 import '../../features/reports/data/models/reporte_model.dart';
 import '../../features/censos/domain/repositories/censos_repository.dart';
@@ -181,7 +181,7 @@ class SyncManager extends ChangeNotifier {
           debugPrint('Error fetching unsynced habitants: ${failure.message}'),
       (habitants) async {
         for (final habitant in habitants) {
-          final model = habitant as HabitanteModel;
+          final model = HabitanteModel.fromEntity(habitant);
           final success = await mongoDBService.createRecord('habitants', model.toJson());
           if (success) {
             await habitantsRepository.markAsSynced(habitant.id);
@@ -199,7 +199,7 @@ class SyncManager extends ChangeNotifier {
           debugPrint('Error fetching unsynced reports: ${failure.message}'),
       (reports) async {
         for (final report in reports) {
-          final model = report as ReporteModel;
+          final model = ReporteModel.fromEntity(report);
           final success = await mongoDBService.createRecord('reports', model.toJson());
           if (success) {
             await reportsRepository.markAsSynced(report.id);

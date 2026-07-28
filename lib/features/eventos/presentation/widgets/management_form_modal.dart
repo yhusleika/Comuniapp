@@ -7,9 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/utils/user_roles_helper.dart';
 import '../../domain/models/management_models.dart';
-import '../../../habitants/domain/entities/habitante.dart';
-import '../../../habitants/presentation/widgets/search_habitante_modal.dart';
-import '../../../habitants/presentation/bloc/habitants_bloc.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
+import '../../../habitantes/presentation/widgets/search_habitante_modal.dart';
+import '../../../habitantes/presentation/bloc/habitants_bloc.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ManagementFormModal extends StatefulWidget {

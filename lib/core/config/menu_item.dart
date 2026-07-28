@@ -39,11 +39,6 @@ const appMenuItems = <MenuItem>[
     icon: Icons.event_note_outlined,
   ),
   MenuItem(
-    title: 'Comuna',
-    link: '/comuna',
-    icon: Icons.foundation_outlined,
-  ),
-  MenuItem(
     title: 'Administración',
     link: '/administracion',
     icon: Icons.admin_panel_settings_outlined,

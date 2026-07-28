@@ -1,7 +1,9 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hive/hive.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/hive_config.dart';
 import '../../../../shared/widgets/custom_scaffold.dart';
 import '../bloc/auth_bloc.dart';
 
@@ -200,8 +202,7 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
     if (_formKey1.currentState!.validate()) {
       setState(() {
         _email = _emailController.text.trim();
-        // Generate a 6-digit simulated code
-        _simulatedCode = '123456';
+        _simulatedCode = (100000 + Random().nextInt(900000)).toString();
         _step = 2;
       });
 
@@ -262,7 +263,7 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
       });
       try {
         final newPassword = _newPasswordController.text;
-        final recoveredBox = await Hive.openBox('recovered_credentials');
+        final recoveredBox = Hive.box(HiveConfig.recoveredCredentialsBox);
         await recoveredBox.put(_email, newPassword);
 
         // If it's an email, also store username part so they can use username directly
@@ -407,7 +408,7 @@ class _ForgotPasswordDialogState extends State<ForgotPasswordDialog> {
               style: const TextStyle(fontSize: 20, letterSpacing: 8, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
                 labelText: 'Código de Verificación',
-                hintText: '123456',
+                hintText: 'Ingrese el código',
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {

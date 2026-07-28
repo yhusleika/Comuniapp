@@ -1,11 +1,16 @@
 const User = require('../models/user.model');
 const bcrypt = require('bcryptjs');
+const { getPagination, getPaginationMeta } = require('../utils/pagination');
 
 // Obtener todos los usuarios
 const getUsers = async (req, res) => {
     try {
-        const users = await User.find().select('-passwordHash');
-        res.status(200).json({ success: true, data: users });
+        const { page, limit, skip } = getPagination(req.query);
+        const [users, total] = await Promise.all([
+            User.find().select('-passwordHash').skip(skip).limit(limit),
+            User.countDocuments(),
+        ]);
+        res.status(200).json({ success: true, data: users, pagination: getPaginationMeta(total, page, limit) });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -24,8 +29,7 @@ const createUser = async (req, res) => {
             return res.status(400).json({ success: false, error: 'El nombre de usuario ya está registrado' });
         }
 
-        const salt = await bcrypt.genSalt(12);
-        const passwordHash = await bcrypt.hash(password, salt);
+        const passwordHash = await bcrypt.hash(password, 12);
 
         const newUser = new User({
             id: `usr_${Date.now()}`,
@@ -40,7 +44,8 @@ const createUser = async (req, res) => {
         });
 
         await newUser.save();
-        res.status(201).json({ success: true, message: 'Usuario creado exitosamente', data: newUser });
+        const userResponse = await User.findById(newUser._id).select('-passwordHash');
+        res.status(201).json({ success: true, message: 'Usuario creado exitosamente', data: userResponse });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -53,13 +58,12 @@ const updateUser = async (req, res) => {
         const updateData = { ...req.body };
 
         if (updateData.password) {
-            const salt = await bcrypt.genSalt(12);
-            updateData.passwordHash = await bcrypt.hash(updateData.password, salt);
+            updateData.passwordHash = await bcrypt.hash(updateData.password, 12);
             delete updateData.password;
         }
 
         const user = await User.findOneAndUpdate(
-            { username: username },
+            { username: username.toLowerCase().trim() },
             { $set: updateData },
             { new: true }
         ).select('-passwordHash');
@@ -78,7 +82,7 @@ const updateUser = async (req, res) => {
 const deleteUser = async (req, res) => {
     try {
         const { username } = req.params;
-        const deleted = await User.findOneAndDelete({ username: username });
+        const deleted = await User.findOneAndDelete({ username: username.toLowerCase().trim() });
         if (!deleted) {
             return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
         }
@@ -91,7 +95,7 @@ const deleteUser = async (req, res) => {
 // Actualizar o crear perfil de usuario propio
 const updateProfile = async (req, res) => {
     try {
-        const username = req.user ? req.user.username : (req.headers['x-username'] || req.body.username);
+        const username = req.user ? req.user.username : req.body.username;
         if (!username) {
             return res.status(400).json({ success: false, error: 'Usuario no autenticado o especificado' });
         }
@@ -105,8 +109,7 @@ const updateProfile = async (req, res) => {
         };
 
         if (req.body.password) {
-            const salt = await bcrypt.genSalt(12);
-            updateData.passwordHash = await bcrypt.hash(req.body.password, salt);
+            updateData.passwordHash = await bcrypt.hash(req.body.password, 12);
         }
 
         if (req.file) {
@@ -116,8 +119,12 @@ const updateProfile = async (req, res) => {
         const user = await User.findOneAndUpdate(
             { username: username },
             { $set: updateData },
-            { new: true, upsert: true }
+            { new: true }
         );
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+        }
 
         res.status(200).json({ success: true, message: 'Perfil actualizado exitosamente', data: user });
     } catch (error) {
@@ -128,26 +135,14 @@ const updateProfile = async (req, res) => {
 // Obtener perfil de usuario
 const getProfile = async (req, res) => {
     try {
-        const username = req.params.username || (req.user ? req.user.username : req.headers['x-username']);
+        const username = req.params.username || (req.user ? req.user.username : null);
         if (!username) {
             return res.status(400).json({ success: false, error: 'Usuario no especificado' });
         }
 
-        const user = await User.findOne({ username: username });
+        const user = await User.findOne({ username: username }).select('-passwordHash');
         if (!user) {
-            return res.status(200).json({
-                success: true,
-                data: {
-                    username: username,
-                    role: username.includes('admin') ? 'admin' : 'operador',
-                    nombres: '',
-                    apellidos: '',
-                    cedula: '',
-                    email: '',
-                    telefono: '',
-                    photoUrl: ''
-                }
-            });
+            return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
         }
 
         res.status(200).json({ success: true, data: user });

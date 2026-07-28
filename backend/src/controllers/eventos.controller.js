@@ -1,40 +1,26 @@
 const Evento = require('../models/evento.model');
+const { getPagination, getPaginationMeta } = require('../utils/pagination');
+const { createSyncController, createUpdateController, createDeleteController } = require('../utils/crudFactory');
 
-const syncEvento = async (req, res) => {
-    try {
-        const data = req.body;
-        const evento = await Evento.findOneAndUpdate({ id: data.id }, data, { new: true, upsert: true });
-        res.status(200).json({ success: true, message: "Evento sincronizado", data: evento });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
+const syncEvento = createSyncController(Evento, { deleteIsSynced: false });
+const updateEvento = createUpdateController(Evento, { deleteIsSynced: false });
+const deleteEvento = createDeleteController(Evento);
 
 const getEventos = async (req, res) => {
     try {
+        const { page, limit, skip } = getPagination(req.query);
         const filter = req.query.category ? { category: req.query.category } : {};
-        const eventos = await Evento.find(filter).sort({ date: -1 });
-        res.status(200).json({ success: true, data: eventos });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
 
-const updateEvento = async (req, res) => {
-    try {
-        const evento = await Evento.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
-        if (!evento) return res.status(404).json({ success: false, message: "Evento no encontrado" });
-        res.status(200).json({ success: true, message: "Evento actualizado", data: evento });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
+        const [eventos, total] = await Promise.all([
+            Evento.find(filter).sort({ date: -1 }).skip(skip).limit(limit),
+            Evento.countDocuments(filter),
+        ]);
 
-const deleteEvento = async (req, res) => {
-    try {
-        const evento = await Evento.findOneAndDelete({ id: req.params.id });
-        if (!evento) return res.status(404).json({ success: false, message: "Evento no encontrado" });
-        res.status(200).json({ success: true, message: "Evento eliminado" });
+        res.status(200).json({
+            success: true,
+            data: eventos,
+            pagination: getPaginationMeta(total, page, limit),
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

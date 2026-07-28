@@ -1,3 +1,5 @@
+import 'package:hive/hive.dart';
+
 enum FieldType { text, number, date, dropdown, checkboxList, radio, checkboxListWithQuantity }
 
 class CensoFieldDef {
@@ -16,10 +18,64 @@ class CensoFieldDef {
     this.options,
     this.isRequired = false,
   });
+
+  CensoFieldDef copyWith({
+    String? id,
+    String? label,
+    String? category,
+    FieldType? type,
+    List<String>? options,
+    bool? isRequired,
+  }) {
+    return CensoFieldDef(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      category: category ?? this.category,
+      type: type ?? this.type,
+      options: options ?? this.options,
+      isRequired: isRequired ?? this.isRequired,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'label': label,
+      'category': category,
+      'type': type.name,
+      'options': options,
+      'isRequired': isRequired,
+    };
+  }
+
+  factory CensoFieldDef.fromMap(Map<String, dynamic> map) {
+    FieldType parsedType = FieldType.text;
+    final typeStr = map['type']?.toString() ?? 'text';
+    for (var ft in FieldType.values) {
+      if (ft.name == typeStr) {
+        parsedType = ft;
+        break;
+      }
+    }
+
+    List<String>? parsedOptions;
+    if (map['options'] != null && map['options'] is List) {
+      parsedOptions = List<String>.from(map['options']);
+    }
+
+    return CensoFieldDef(
+      id: map['id']?.toString() ?? '',
+      label: map['label']?.toString() ?? '',
+      category: map['category']?.toString() ?? 'General',
+      type: parsedType,
+      options: parsedOptions,
+      isRequired: map['isRequired'] == true,
+    );
+  }
 }
 
 class CensoDictionary {
-  static const List<CensoFieldDef> fields = [
+  static const List<CensoFieldDef> defaultFields = [
     // Datos de Identificación del Censo
     CensoFieldDef(
       id: 'no_casa_existente',
@@ -411,8 +467,106 @@ class CensoDictionary {
     ),
   ];
 
+  static List<CensoFieldDef> _activeFields = [];
+  static List<String> _customCategories = [];
+
+  static List<CensoFieldDef> get fields {
+    if (_activeFields.isEmpty) {
+      _activeFields = List.from(defaultFields);
+    }
+    return _activeFields;
+  }
+
+  static Future<void> loadTemplateFromStorage() async {
+    try {
+      final box = await Hive.openBox('censo_template_box');
+      final storedFields = box.get('fields');
+      final storedCategories = box.get('categories');
+
+      if (storedCategories != null && storedCategories is List) {
+        _customCategories = List<String>.from(storedCategories);
+      } else {
+        _customCategories = [];
+      }
+
+      if (storedFields != null && storedFields is List && storedFields.isNotEmpty) {
+        final List<CensoFieldDef> loaded = [];
+        for (var item in storedFields) {
+          if (item is Map) {
+            loaded.add(CensoFieldDef.fromMap(Map<String, dynamic>.from(item)));
+          }
+        }
+        if (loaded.isNotEmpty) {
+          _activeFields = loaded;
+          return;
+        }
+      }
+    } catch (_) {}
+    _activeFields = List.from(defaultFields);
+  }
+
+  static Future<void> saveTemplateToStorage() async {
+    try {
+      final box = await Hive.openBox('censo_template_box');
+      await box.put('fields', _activeFields.map((f) => f.toMap()).toList());
+      await box.put('categories', _customCategories);
+    } catch (_) {}
+  }
+
+  static Future<void> resetToDefaults() async {
+    _activeFields = List.from(defaultFields);
+    _customCategories = [];
+    await saveTemplateToStorage();
+  }
+
+  static Future<void> addCategory(String categoryName) async {
+    final clean = categoryName.trim();
+    if (clean.isNotEmpty && !_customCategories.contains(clean)) {
+      _customCategories.add(clean);
+      await saveTemplateToStorage();
+    }
+  }
+
+  static Future<void> deleteCategory(String categoryName) async {
+    _customCategories.remove(categoryName);
+    _activeFields.removeWhere((f) => f.category == categoryName);
+    await saveTemplateToStorage();
+  }
+
+  static Future<void> addOrUpdateField(CensoFieldDef field) async {
+    final idx = _activeFields.indexWhere((f) => f.id == field.id);
+    if (idx != -1) {
+      _activeFields[idx] = field;
+    } else {
+      _activeFields.add(field);
+    }
+    if (!_customCategories.contains(field.category)) {
+      _customCategories.add(field.category);
+    }
+    await saveTemplateToStorage();
+  }
+
+  static Future<void> deleteField(String fieldId) async {
+    _activeFields.removeWhere((f) => f.id == fieldId);
+    await saveTemplateToStorage();
+  }
+
+  static List<String> getCategories() {
+    final Set<String> categoriesSet = {};
+    for (var f in fields) {
+      categoriesSet.add(f.category);
+    }
+    for (var c in _customCategories) {
+      categoriesSet.add(c);
+    }
+    return categoriesSet.toList();
+  }
+
   static Map<String, List<CensoFieldDef>> getCategorizedFields() {
     final Map<String, List<CensoFieldDef>> map = {};
+    for (var cat in getCategories()) {
+      map[cat] = [];
+    }
     for (var f in fields) {
       if (!map.containsKey(f.category)) {
         map[f.category] = [];
@@ -422,3 +576,4 @@ class CensoDictionary {
     return map;
   }
 }
+

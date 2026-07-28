@@ -45,12 +45,13 @@ const getStats = async (req, res) => {
             Evento.countDocuments({ category: 'Jornadas' }),
         ]);
 
-        // Últimas 10 actividades (de todas las colecciones, ordenadas por fecha)
-        const [recentHabitants, recentReports, recentEventos] = await Promise.all([
-            Habitante.find().sort({ createdAt: -1 }).limit(5).select('id nombres apellidos createdAt'),
-            Reporte.find().sort({ createdAt: -1 }).limit(5).select('id titulo tipo createdAt'),
-            Evento.find().sort({ createdAt: -1 }).limit(5).select('id name category status createdAt'),
-        ]);
+        const ageDistribution = { children: 0, youth: 0, adults: 0, seniors: 0 };
+        for (const bucket of ageBuckets) {
+            if (bucket._id === 0) ageDistribution.children = bucket.count;
+            else if (bucket._id === 15) ageDistribution.youth = bucket.count;
+            else if (bucket._id === 30) ageDistribution.adults = bucket.count;
+            else if (bucket._id === 60) ageDistribution.seniors = bucket.count;
+        }
 
         const recentActivity = [
             ...recentHabitants.map(h => ({

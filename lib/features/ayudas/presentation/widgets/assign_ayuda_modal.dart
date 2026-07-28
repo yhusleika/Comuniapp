@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../habitants/domain/entities/habitante.dart';
-import '../../../habitants/presentation/widgets/search_habitante_modal.dart';
+import '../../../habitantes/domain/entities/habitante.dart';
+import '../../../habitantes/presentation/widgets/search_habitante_modal.dart';
 import '../../domain/entities/ayuda_type.dart';
 
 class AssignAyudaModal extends StatefulWidget {

@@ -6,8 +6,7 @@ class AuthNotifier extends ChangeNotifier {
   final AuthBloc authBloc;
 
   AuthNotifier(this.authBloc) {
-    authBloc.stream.listen((state) {
-      print('AuthNotifier: Received state change: $state');
+    authBloc.stream.listen((_) {
       notifyListeners();
     });
   }

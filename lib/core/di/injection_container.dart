@@ -13,14 +13,14 @@ import '../../features/configuracion/domain/repositories/profile_repository.dart
 import '../../features/configuracion/data/repositories/profile_repository_impl.dart';
 import '../../features/configuracion/presentation/bloc/profile_bloc.dart';
 
-import '../../features/habitants/domain/repositories/habitants_repository.dart';
-import '../../features/habitants/data/repositories/habitants_repository_impl.dart';
-import '../../features/habitants/data/datasources/habitants_local_data_source.dart';
-import '../../features/habitants/presentation/bloc/habitants_bloc.dart';
-import '../../features/habitants/domain/usecases/get_habitants.dart';
-import '../../features/habitants/domain/usecases/add_habitante.dart';
-import '../../features/habitants/domain/usecases/update_habitante.dart';
-import '../../features/habitants/domain/usecases/delete_habitante.dart';
+import '../../features/habitantes/domain/repositories/habitants_repository.dart';
+import '../../features/habitantes/data/repositories/habitants_repository_impl.dart';
+import '../../features/habitantes/data/datasources/habitants_local_data_source.dart';
+import '../../features/habitantes/presentation/bloc/habitants_bloc.dart';
+import '../../features/habitantes/domain/usecases/get_habitants.dart';
+import '../../features/habitantes/domain/usecases/add_habitante.dart';
+import '../../features/habitantes/domain/usecases/update_habitante.dart';
+import '../../features/habitantes/domain/usecases/delete_habitante.dart';
 
 import '../../features/reports/domain/usecases/get_reports.dart';
 import '../../features/reports/domain/usecases/create_report.dart';
@@ -59,6 +59,13 @@ import '../../features/auditoria/presentation/bloc/auditoria_bloc.dart';
 import '../../features/eventos/domain/repositories/eventos_repository.dart';
 import '../../features/eventos/data/repositories/eventos_repository_impl.dart';
 import '../../features/eventos/data/datasources/eventos_local_data_source.dart';
+
+import '../../features/dashboard/domain/repositories/dashboard_repository.dart';
+import '../../features/dashboard/data/repositories/dashboard_repository_impl.dart';
+import '../../features/dashboard/data/datasources/dashboard_remote_data_source.dart';
+import '../../features/dashboard/data/datasources/dashboard_local_data_source.dart';
+import '../../features/dashboard/domain/usecases/get_dashboard_stats.dart';
+import '../../features/dashboard/presentation/bloc/dashboard_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -242,6 +249,19 @@ Future<void> init() async {
         mongoDBService: sl(),
       ));
   sl.registerLazySingleton<EventosLocalDataSource>(() => EventosLocalDataSourceImpl());
+
+  // ! Features - Dashboard
+  sl.registerFactory(() => DashboardBloc(getDashboardStats: sl()));
+  sl.registerLazySingleton(() => GetDashboardStats(sl()));
+  sl.registerLazySingleton<DashboardRepository>(() => DashboardRepositoryImpl(
+        remoteDataSource: sl(),
+        localDataSource: sl(),
+        networkInfo: sl(),
+      ));
+  sl.registerLazySingleton<DashboardRemoteDataSource>(
+      () => DashboardRemoteDataSourceImpl(mongoDBService: sl()));
+  sl.registerLazySingleton<DashboardLocalDataSource>(
+      () => DashboardLocalDataSourceImpl());
 
   // Sync
   sl.registerLazySingleton(() => SyncManager(
