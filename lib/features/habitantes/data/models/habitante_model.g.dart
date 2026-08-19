@@ -33,7 +33,7 @@ class HabitanteModelAdapter extends TypeAdapter<HabitanteModel> {
       registeredBy: fields[13] as String,
       fechaRegistro: fields[14] as DateTime,
       fechaNacimiento: fields[17] as DateTime?,
-      genero: fields[18] as String,
+      sexo: fields[18] as String,
       isSynced: fields[15] as bool,
       ayudaRecibida: fields[16] as String,
     );
@@ -80,7 +80,7 @@ class HabitanteModelAdapter extends TypeAdapter<HabitanteModel> {
       ..writeByte(17)
       ..write(obj.fechaNacimiento)
       ..writeByte(18)
-      ..write(obj.genero);
+      ..write(obj.sexo);
   }
 
   @override

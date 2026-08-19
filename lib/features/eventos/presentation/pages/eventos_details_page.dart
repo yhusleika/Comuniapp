@@ -128,7 +128,7 @@ class _EventosDetailsPageState extends State<EventosDetailsPage> {
         TextCellValue('Avance de Actividad'),
         TextCellValue('${(a.progress * 100).toInt()}%'),
         TextCellValue(a.descripcion),
-        TextCellValue(DateFormat('yyyy-MM-dd').format(a.fecha))
+        TextCellValue(DateFormat('dd/MM/yyyy').format(a.fecha))
       ]);
     }
 

@@ -30,26 +30,52 @@ class _AddHabitantePageState extends State<AddHabitantePage> {
   bool _tieneEnfermedad = false;
   String _condicionVivienda = 'Propia';
   String _tipoVivienda = 'Casa';
-  String _genero = '';
+  String _sexo = '';
   List<String> _sectoresDisponibles = SectoresHelper.defaultSectores;
   String _selectedSector = SectoresHelper.defaultSectores.first;
 
   @override
   void initState() {
     super.initState();
+    _cedulaCtrl.addListener(_onCedulaChanged);
     _sectorCtrl.text = _selectedSector;
     _loadSectores();
   }
 
-  Future<void> _loadSectores() async {
-    final list = await SectoresHelper.getAvailableSectores();
-    if (mounted && list.isNotEmpty) {
-      setState(() {
-        _sectoresDisponibles = list;
-        _selectedSector = list.first;
-        _sectorCtrl.text = _selectedSector;
-      });
+  void _onCedulaChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _cedulaCtrl.removeListener(_onCedulaChanged);
+    _cedulaCtrl.dispose();
+    _nombresCtrl.dispose();
+    _apellidosCtrl.dispose();
+    _telefonoCtrl.dispose();
+    _sectorCtrl.dispose();
+    _puntoRefCtrl.dispose();
+    _detallesDiscapacidadCtrl.dispose();
+    _detallesEnfermedadCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _getParentChildLabel(String input, List<Habitante> habitants) {
+    final trimmed = input.trim();
+    if (!trimmed.contains('-')) return null;
+
+    final parts = trimmed.split('-');
+    final parentCed = parts.first.trim();
+    if (parentCed.isEmpty) return null;
+
+    for (final h in habitants) {
+      if (h.cedula.trim() == parentCed) {
+        final pNombre = h.nombres.trim().split(' ').first;
+        final pApellido = h.apellidos.trim().split(' ').first;
+        return '(hijo de $pNombre $pApellido)';
+      }
     }
+    return '(hijo de C.I. $parentCed)';
   }
 
   @override
@@ -92,7 +118,7 @@ class _AddHabitantePageState extends State<AddHabitantePage> {
                       detallesEnfermedad: _detallesEnfermedadCtrl.text,
                       condicionVivienda: _condicionVivienda,
                       tipoVivienda: _tipoVivienda,
-                      genero: _genero,
+                      sexo: _sexo,
                       registeredBy: 'current_user_id',
                       fechaRegistro: DateTime.now(),
                    );
@@ -110,9 +136,35 @@ class _AddHabitantePageState extends State<AddHabitantePage> {
             steps: [
               Step(
                 title: const Text('Datos Personales'),
-                content: Column(
-                  children: [
-                    TextFormField(controller: _cedulaCtrl, decoration: const InputDecoration(labelText: 'Cédula (Opcional)')),
+                content: Builder(
+                  builder: (context) {
+                    final hState = context.watch<HabitantsBloc>().state;
+                    final allHabitants = hState is HabitantsLoaded ? hState.habitants : <Habitante>[];
+                    final parentLabel = _getParentChildLabel(_cedulaCtrl.text, allHabitants);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          controller: _cedulaCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Cédula *',
+                            hintText: 'Ej. 26498909 o 26498909-1 (Menor)',
+                          ),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'La Cédula es obligatoria' : null,
+                        ),
+                        if (parentLabel != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            parentLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade800,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
                     const SizedBox(height: 8),
                     TextFormField(controller: _nombresCtrl, decoration: const InputDecoration(labelText: 'Nombres')),
                     const SizedBox(height: 8),
@@ -121,16 +173,18 @@ class _AddHabitantePageState extends State<AddHabitantePage> {
                     TextFormField(controller: _telefonoCtrl, decoration: const InputDecoration(labelText: 'Teléfono')),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: _genero,
-                      decoration: const InputDecoration(labelText: 'Género'),
+                      value: _sexo,
+                      decoration: const InputDecoration(labelText: 'Sexo'),
                       items: const [
                         DropdownMenuItem(value: '', child: Text('Seleccionar...')),
                         DropdownMenuItem(value: 'hombre', child: Text('Hombre')),
                         DropdownMenuItem(value: 'mujer', child: Text('Mujer')),
                       ],
-                      onChanged: (v) => setState(() => _genero = v!),
+                      onChanged: (v) => setState(() => _sexo = v!),
                     ),
                   ],
+                );
+              },
                 ),
                 isActive: _currentStep >= 0,
               ),

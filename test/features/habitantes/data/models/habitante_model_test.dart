@@ -17,7 +17,7 @@ void main() {
     tipoVivienda: 'Casa',
     registeredBy: 'admin',
     fechaRegistro: DateTime(2024, 1, 1),
-    genero: 'Masculino',
+    sexo: 'Masculino',
   );
 
   final tJson = {
@@ -37,7 +37,7 @@ void main() {
     'registeredBy': 'admin',
     'fechaRegistro': '2024-01-01T00:00:00.000',
     'fechaNacimiento': null,
-    'genero': 'Masculino',
+    'sexo': 'Masculino',
     'isSynced': true,
     'ayudaRecibida': '',
   };
@@ -83,7 +83,7 @@ void main() {
       final minimalJson = <String, dynamic>{};
       final model = HabitanteModel.fromJson(minimalJson);
       expect(model.id, '');
-      expect(model.genero, '');
+      expect(model.sexo, '');
       expect(model.isSynced, true);
     });
   });

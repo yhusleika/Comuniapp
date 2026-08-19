@@ -57,7 +57,7 @@ class _ManagementFormModalState extends State<ManagementFormModal> {
     
     _selectedDate = widget.item?.date ?? DateTime.now();
     _dateController = TextEditingController(
-      text: DateFormat('yyyy-MM-dd').format(_selectedDate),
+      text: DateFormat('dd/MM/yyyy').format(_selectedDate),
     );
 
     if (widget.item != null && widget.item!.responsible.isNotEmpty) {
@@ -172,7 +172,7 @@ class _ManagementFormModalState extends State<ManagementFormModal> {
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
-        _dateController.text = DateFormat('yyyy-MM-dd').format(picked);
+        _dateController.text = DateFormat('dd/MM/yyyy').format(picked);
       });
     }
   }

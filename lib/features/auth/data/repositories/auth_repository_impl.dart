@@ -162,6 +162,19 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final user = await localDataSource.getLastUser();
       if (user != null) {
+        try {
+          const storage = FlutterSecureStorage();
+          final token = await storage.read(key: 'jwt_token');
+          if (token == null || token.isEmpty) {
+            final recoveredBox = await Hive.openBox(HiveConfig.recoveredCredentialsBox);
+            final savedPass = recoveredBox.get(user.username.toLowerCase());
+            if (savedPass != null) {
+              await login(user.username, savedPass.toString());
+            }
+          }
+        } catch (e) {
+          // Si falla el almacenamiento seguro o login, continuar retornando el usuario local
+        }
         return Right(user);
       }
       return const Right(null);

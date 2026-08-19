@@ -255,7 +255,7 @@ class _EventosViewState extends State<EventosView> {
     for (final item in list) {
       sheet.appendRow([
         TextCellValue(item.name),
-        TextCellValue(DateFormat('yyyy-MM-dd').format(item.date)),
+        TextCellValue(DateFormat('dd/MM/yyyy').format(item.date)),
         TextCellValue(item.responsible),
         DoubleCellValue(item.progress),
         TextCellValue(item.status),

@@ -6,7 +6,6 @@ if (!JWT_SECRET) {
 }
 
 const verifyToken = (req, res, next) => {
-    // Permitir preflight requests OPTIONS del navegador (CORS)
     if (req.method === 'OPTIONS') {
         return next();
     }

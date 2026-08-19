@@ -20,9 +20,10 @@ class MongoDBService {
 
     if (kDebugMode) {
       // Desarrollo local
-      return kIsWeb 
-          ? 'http://localhost:3000/v1' 
-          : 'http://10.0.2.2:3000/v1';
+      final isAndroidEmulator = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      return isAndroidEmulator 
+          ? 'http://10.0.2.2:3000/v1' 
+          : 'http://localhost:3000/v1';
     }
     
     // ===== PRODUCCIÓN =====
@@ -121,6 +122,18 @@ class MongoDBService {
 
   Future<bool> deleteUser(String username) async {
     return deleteRecord('users', username);
+  }
+
+  Future<bool> resetPassword(String username, String newPassword) async {
+    try {
+      final response = await _dio.post('/users/reset-password', data: {
+        'username': username,
+        'newPassword': newPassword,
+      });
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Verifica si el servidor backend y Render están activos (Health check)

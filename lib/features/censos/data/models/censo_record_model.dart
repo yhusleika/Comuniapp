@@ -116,7 +116,7 @@ class CensoRecordModel extends CensoRecord {
 
   factory CensoRecordModel.fromJson(Map<String, dynamic> json) {
     return CensoRecordModel(
-      id: json['id'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
       censoId: json['censoId'] ?? '',
       jefeFamilia: json['jefeFamilia'] ?? '',
       cedula: json['cedula'] ?? '',

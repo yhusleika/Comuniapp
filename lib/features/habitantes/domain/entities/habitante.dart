@@ -18,7 +18,7 @@ class Habitante extends Equatable {
   final String registeredBy;
   final DateTime fechaRegistro;
   final DateTime? fechaNacimiento;
-  final String genero;
+  final String sexo;
 
   const Habitante({
     required this.id,
@@ -38,9 +38,9 @@ class Habitante extends Equatable {
     required this.registeredBy,
     required this.fechaRegistro,
     this.fechaNacimiento,
-    this.genero = '',
+    this.sexo = '',
   });
 
   @override
-  List<Object?> get props => [id, cedula, nombres, apellidos, telefono, sector, ayudaRecibida, puntoReferencia, tieneDiscapacidad, detallesDiscapacidad, tieneEnfermedadCronica, detallesEnfermedad, condicionVivienda, tipoVivienda, registeredBy, fechaRegistro, fechaNacimiento, genero];
+  List<Object?> get props => [id, cedula, nombres, apellidos, telefono, sector, ayudaRecibida, puntoReferencia, tieneDiscapacidad, detallesDiscapacidad, tieneEnfermedadCronica, detallesEnfermedad, condicionVivienda, tipoVivienda, registeredBy, fechaRegistro, fechaNacimiento, sexo];
 }

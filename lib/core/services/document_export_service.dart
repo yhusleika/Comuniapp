@@ -250,6 +250,7 @@ class DocumentExportService {
       );
     }
   }
+
   /// Guarda un archivo Excel ya generado usando el FileSaver centralizado.
   static Future<void> saveExcel({
     required String fileName,

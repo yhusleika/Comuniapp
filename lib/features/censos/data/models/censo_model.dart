@@ -88,7 +88,7 @@ class CensoModel extends Censo {
 
   factory CensoModel.fromJson(Map<String, dynamic> json) {
     return CensoModel(
-      id: json['id'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
       nombre: json['nombre'] ?? '',
       zona: json['zona'] ?? '',
       responsable: json['responsable'] ?? '',

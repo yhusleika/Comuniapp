@@ -112,8 +112,8 @@ class _EstadisticasViewState extends State<EstadisticasView>
 
       try {
         remoteStats = await mongoService.getStats();
-        remoteHabitants = await mongoService.getRecords('habitants');
-        remoteCensoRecords = await mongoService.getRecords('censo_records');
+        remoteHabitants = await mongoService.getRecords('habitants', queryParameters: {'limit': 1000});
+        remoteCensoRecords = await mongoService.getRecords('censo_records', queryParameters: {'limit': 1000});
         isRemoteConnected = true;
       } catch (_) {}
 
@@ -166,7 +166,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
               'nombres': r['nombres'] ?? '',
               'apellidos': r['apellidos'] ?? '',
               'cedula': r['cedula'] ?? '',
-              'genero': r['genero'] ?? '',
+              'sexo': r['sexo'] ?? r['genero'] ?? '',
               'fechaNacimiento': birthDate,
               'ayudaRecibida': r['ayudaRecibida'] ?? '',
               'tieneDiscapacidad': r['tieneDiscapacidad'] == true,
@@ -182,7 +182,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
             'nombres': h.nombres,
             'apellidos': h.apellidos,
             'cedula': h.cedula,
-            'genero': h.genero,
+            'sexo': h.sexo,
             'fechaNacimiento': h.fechaNacimiento,
             'ayudaRecibida': h.ayudaRecibida,
             'tieneDiscapacidad': h.tieneDiscapacidad,
@@ -198,8 +198,9 @@ class _EstadisticasViewState extends State<EstadisticasView>
       int totalCensosCount = isRemoteConnected
           ? ((remoteStats['counts']?['censos'] as int?) ?? censosBox.length)
           : censosBox.length;
-      final int remoteAyudasCount = (remoteStats['counts']?['ayudas'] as int?) ?? 0;
-      int assignedAyudasCount = isRemoteConnected ? remoteAyudasCount : 0;
+
+      int assignedAyudasCount = 0;
+
       int children = 0; // 0-14
       int youth = 0;    // 15-29
       int adults = 0;   // 30-59
@@ -272,8 +273,8 @@ class _EstadisticasViewState extends State<EstadisticasView>
         countedHabitanteIds.add(id);
 
         final nombres = h['nombres'] as String? ?? '';
-        final genero = h['genero'] as String? ?? '';
-        if (isFemale(nombres, genero)) {
+        final sexo = h['sexo'] as String? ?? h['genero'] as String? ?? '';
+        if (isFemale(nombres, sexo)) {
           femaleCount++;
         } else {
           maleCount++;
@@ -314,58 +315,6 @@ class _EstadisticasViewState extends State<EstadisticasView>
             orElse: () => 'Otro',
           );
           eduCounts[matchedKey] = eduCounts[matchedKey]! + 1;
-        }
-      }
-
-      // Procesar datos adicionales de censos
-      for (final recordData in allCensoRecords) {
-        final familiares = (recordData is Map ? recordData['familiares'] : null) as List? ?? [];
-        for (final m in familiares) {
-          if (m is Map) {
-            final String? habitanteId = m['habitanteId']?.toString();
-            final isLinked = habitanteId != null && habitanteId.isNotEmpty;
-            final alreadyCounted = isLinked && countedHabitanteIds.contains(habitanteId);
-
-            final name = m['jefeFamilia']?.toString() ?? m['nombres']?.toString() ?? '';
-            final edu = m['escolaridad']?.toString() ?? '';
-
-            if (name.isNotEmpty && !alreadyCounted) {
-              if (isFemale(name)) {
-                femaleCount++;
-              } else {
-                maleCount++;
-              }
-            }
-
-            final ageStr = m['edad']?.toString() ?? '';
-            if (ageStr.isNotEmpty) {
-              final age = int.tryParse(ageStr);
-              if (age != null) processAge(age);
-            }
-
-            if (edu.isNotEmpty && !alreadyCounted) {
-              final matchedKey = eduCounts.keys.firstWhere(
-                (k) => edu.toLowerCase().contains(k.toLowerCase()),
-                orElse: () => 'Otro',
-              );
-              eduCounts[matchedKey] = eduCounts[matchedKey]! + 1;
-            }
-
-            if (!alreadyCounted) {
-              final discList = m['salud_discapacidad'];
-              if (discList != null) {
-                final str = discList.toString().toLowerCase();
-                if (str.contains('ninguna') || str.isEmpty) {
-                  volNinguna++;
-                } else {
-                  if (str.contains('motor')) volMotora++;
-                  if (str.contains('visual')) volVisual++;
-                  if (str.contains('audit')) volAuditiva++;
-                  if (str.contains('intel')) volIntelectual++;
-                }
-              }
-            }
-          }
         }
       }
 
@@ -474,7 +423,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
       String response = 'Consulta no reconocida. Puedes consultar sobre el total de habitantes, edades, escolaridad o vulnerabilidad.';
       
       if (lower.contains('total') || lower.contains('habitante') || lower.contains('poblacion')) {
-        response = 'En la base de datos de la comunidad hay registrados $_totalInhabitants habitantes. Distribución por género: $_femalePercentage% femenino y $_malePercentage% masculino.';
+        response = 'En la base de datos de la comunidad hay registrados $_totalInhabitants habitantes. Distribución por sexo: $_femalePercentage% femenino y $_malePercentage% masculino.';
       } else if (lower.contains('edad') || lower.contains('joven') || lower.contains('niño') || lower.contains('anciano') || lower.contains('mayor')) {
         final ageStr = _ageDistribution.map((e) => '${e.label}: ${e.percentage}%').join(', ');
         response = 'Distribución por edades calculada desde el sistema: $ageStr.';
@@ -1219,7 +1168,7 @@ class _EstadisticasViewState extends State<EstadisticasView>
 
   Widget _buildGenderCard(ThemeData theme) {
     return _ChartCard(
-      title: 'Distribución por Género',
+      title: 'Distribución por Sexo',
       subtitle: 'Balance poblacional masculino y femenino',
       icon: Icons.person_search,
       child: Column(

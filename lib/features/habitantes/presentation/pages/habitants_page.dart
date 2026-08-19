@@ -405,18 +405,22 @@ class _HabitantsViewState extends State<HabitantsView> {
   // ─── Modal Agregar / Editar ────────────────────────────────────────────────
 
   void _showHabitanteModal({Habitante? habitante}) {
+    final bloc = context.read<HabitantsBloc>();
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogCtx) => _HabitanteFormDialog(
-        habitante: habitante,
-        onSave: (newHabitante) {
-          if (habitante != null) {
-            context.read<HabitantsBloc>().add(UpdateHabitanteEvent(newHabitante));
-          } else {
-            context.read<HabitantsBloc>().add(CreateHabitante(newHabitante));
-          }
-        },
+      builder: (dialogCtx) => BlocProvider.value(
+        value: bloc,
+        child: _HabitanteFormDialog(
+          habitante: habitante,
+          onSave: (newHabitante) {
+            if (habitante != null) {
+              bloc.add(UpdateHabitanteEvent(newHabitante));
+            } else {
+              bloc.add(CreateHabitante(newHabitante));
+            }
+          },
+        ),
       ),
     );
   }
@@ -472,7 +476,7 @@ class _HabitantsViewState extends State<HabitantsView> {
     await DocumentExportService.exportToExcel(
       fileName: 'habitantes.xlsx',
       sheetName: 'Habitantes',
-      headers: ['Nombres', 'Apellidos', 'Cédula', 'Edad', 'Género', 'Teléfono', 'Sector', 'Ayuda Recibida', 'Cond. Vivienda', 'Tipo Vivienda', 'Discapacidad', 'Enf. Crónica', 'Fecha Registro'],
+      headers: ['Nombres', 'Apellidos', 'Cédula', 'Edad', 'Sexo', 'Teléfono', 'Sector', 'Ayuda Recibida', 'Cond. Vivienda', 'Tipo Vivienda', 'Discapacidad', 'Enf. Crónica', 'Fecha Registro'],
       data: list.map((h) {
         final birthDate = h.fechaNacimiento;
         String ageText = '-';
@@ -484,13 +488,13 @@ class _HabitantsViewState extends State<HabitantsView> {
           }
           ageText = '$age';
         }
-        final generoText = h.genero.isEmpty ? '-' : h.genero[0].toUpperCase() + h.genero.substring(1);
+        final sexoText = h.sexo.isEmpty ? '-' : h.sexo[0].toUpperCase() + h.sexo.substring(1);
         return [
           h.nombres,
           h.apellidos,
           h.cedula,
           ageText,
-          generoText,
+          sexoText,
           h.telefono,
           h.sector,
           h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida,
@@ -525,7 +529,7 @@ class _HabitantsViewState extends State<HabitantsView> {
       'Nombre Completo',
       'Cédula',
       'Edad',
-      'Género',
+      'Sexo',
       'Teléfono',
       'Sector',
       'Ayuda Recibida',
@@ -545,12 +549,13 @@ class _HabitantsViewState extends State<HabitantsView> {
         }
         ageText = '$age';
       }
-      final generoText = h.genero.isEmpty ? '-' : h.genero[0].toUpperCase() + h.genero.substring(1);
+      final sexoText = h.sexo.isEmpty ? '-' : h.sexo[0].toUpperCase() + h.sexo.substring(1);
+
       return [
         '${h.nombres} ${h.apellidos}',
         h.cedula,
         ageText,
-        generoText,
+        sexoText,
         h.telefono.isEmpty ? '-' : h.telefono,
         h.sector,
         h.ayudaRecibida.isEmpty ? 'Ninguna' : h.ayudaRecibida,
@@ -606,7 +611,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
   late final TextEditingController _detallesEnfermedadCtrl;
 
   DateTime? _selectedBirthDate;
-  String _genero = '';
+  String _sexo = '';
   String _zona = 'Sector 1';
   String _ayuda = 'Ninguna';
   String _condVivienda = 'Propia';
@@ -627,13 +632,14 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
     _nombresCtrl = TextEditingController(text: h?.nombres ?? '');
     _apellidosCtrl = TextEditingController(text: h?.apellidos ?? '');
     _cedulaCtrl = TextEditingController(text: h?.cedula ?? '');
+    _cedulaCtrl.addListener(_onCedulaChanged);
     _telefonoCtrl = TextEditingController(text: h?.telefono ?? '');
     _ptoRefCtrl = TextEditingController(text: h?.puntoReferencia ?? '');
-    _genero = h?.genero ?? '';
+    _sexo = h?.sexo ?? '';
     _selectedBirthDate = h?.fechaNacimiento;
     _birthDateCtrl = TextEditingController(
       text: _selectedBirthDate != null
-          ? DateFormat('yyyy-MM-dd').format(_selectedBirthDate!)
+          ? DateFormat('dd/MM/yyyy').format(_selectedBirthDate!)
           : '',
     );
     _detallesDiscapacidadCtrl =
@@ -647,6 +653,28 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
     _tieneDiscapacidad = h?.tieneDiscapacidad ?? false;
     _tieneEnfermedad = h?.tieneEnfermedadCronica ?? false;
     _loadSectores();
+  }
+
+  void _onCedulaChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String? _getParentChildLabel(String input, List<Habitante> habitants) {
+    final trimmed = input.trim();
+    if (!trimmed.contains('-')) return null;
+
+    final parts = trimmed.split('-');
+    final parentCed = parts.first.trim();
+    if (parentCed.isEmpty) return null;
+
+    for (final h in habitants) {
+      if (h.cedula.trim() == parentCed) {
+        final pNombre = h.nombres.trim().split(' ').first;
+        final pApellido = h.apellidos.trim().split(' ').first;
+        return '(hijo de $pNombre $pApellido)';
+      }
+    }
+    return '(hijo de C.I. $parentCed)';
   }
 
   Future<void> _loadSectores() async {
@@ -663,6 +691,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
 
   @override
   void dispose() {
+    _cedulaCtrl.removeListener(_onCedulaChanged);
     _nombresCtrl.dispose();
     _apellidosCtrl.dispose();
     _cedulaCtrl.dispose();
@@ -694,7 +723,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
       registeredBy: widget.habitante?.registeredBy ?? 'admin',
       fechaRegistro: widget.habitante?.fechaRegistro ?? DateTime.now(),
       fechaNacimiento: _selectedBirthDate,
-      genero: _genero,
+      sexo: _sexo,
     );
     widget.onSave(newH);
     Navigator.pop(context);
@@ -706,6 +735,15 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
 
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 600;
+
+    List<Habitante> allHabitants = [];
+    try {
+      final hState = context.watch<HabitantsBloc>().state;
+      if (hState is HabitantsLoaded) {
+        allHabitants = hState.habitants;
+      }
+    } catch (_) {}
+    final parentLabel = _getParentChildLabel(_cedulaCtrl.text, allHabitants);
 
     return Dialog(
       alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
@@ -780,7 +818,16 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: _field(_cedulaCtrl, 'Cédula (Opcional)', Icons.badge, required: false, keyboardType: TextInputType.number)),
+                          Expanded(
+                            child: _field(
+                              _cedulaCtrl,
+                              'Cédula *',
+                              Icons.badge,
+                              required: true,
+                              keyboardType: TextInputType.text,
+                              validator: (v) => (v == null || v.trim().isEmpty) ? 'La Cédula es obligatoria' : null,
+                            ),
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _field(
@@ -800,6 +847,21 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                           ),
                         ],
                       ),
+                      if (parentLabel != null) ...[
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4.0),
+                          child: Text(
+                            parentLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade800,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -815,7 +877,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                                 if (picked != null) {
                                   setState(() {
                                     _selectedBirthDate = picked;
-                                    _birthDateCtrl.text = DateFormat('yyyy-MM-dd').format(picked);
+                                    _birthDateCtrl.text = DateFormat('dd/MM/yyyy').format(picked);
                                   });
                                 }
                               },
@@ -827,9 +889,9 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: _genero,
+                              value: _sexo,
                               decoration: InputDecoration(
-                                labelText: 'Género',
+                                labelText: 'Sexo',
                                 prefixIcon: const Icon(Icons.wc, size: 20),
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -839,7 +901,7 @@ class _HabitanteFormDialogState extends State<_HabitanteFormDialog> {
                                 DropdownMenuItem(value: 'hombre', child: Text('Hombre')),
                                 DropdownMenuItem(value: 'mujer', child: Text('Mujer')),
                               ],
-                              onChanged: (v) => setState(() => _genero = v!),
+                              onChanged: (v) => setState(() => _sexo = v!),
                             ),
                           ),
                         ],

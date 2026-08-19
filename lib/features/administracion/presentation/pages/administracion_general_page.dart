@@ -9,6 +9,8 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/utils/user_roles_helper.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../../censos/domain/entities/censo_fields_dictionary.dart';
+import '../../../../core/services/hive_config.dart';
+import '../../../habitantes/data/models/habitante_model.dart';
 
 class SystemUser {
   final String id;
@@ -18,6 +20,8 @@ class SystemUser {
   final String role; // 'Administrador', 'Operador', 'Visor'
   final String status; // 'Activo', 'Bloqueado'
   final String password;
+  final String cedula;
+  final String telefono;
 
   SystemUser({
     required this.id,
@@ -27,6 +31,8 @@ class SystemUser {
     required this.role,
     required this.status,
     required this.password,
+    this.cedula = '',
+    this.telefono = '',
   });
 
   SystemUser copyWith({
@@ -37,6 +43,8 @@ class SystemUser {
     String? role,
     String? status,
     String? password,
+    String? cedula,
+    String? telefono,
   }) {
     return SystemUser(
       id: id ?? this.id,
@@ -46,6 +54,8 @@ class SystemUser {
       role: role ?? this.role,
       status: status ?? this.status,
       password: password ?? this.password,
+      cedula: cedula ?? this.cedula,
+      telefono: telefono ?? this.telefono,
     );
   }
 }
@@ -238,6 +248,8 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
               role: roleDisplay,
               status: u['status'] == 'Bloqueado' ? 'Bloqueado' : 'Activo',
               password: '••••••••',
+              cedula: (u['cedula'] ?? '').toString(),
+              telefono: (u['telefono'] ?? '').toString(),
             );
           }
         }
@@ -259,6 +271,8 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
               role: u['role'] ?? 'Operador',
               status: u['status'] ?? 'Activo',
               password: '••••••••',
+              cedula: (u['cedula'] ?? '').toString(),
+              telefono: (u['telefono'] ?? '').toString(),
             );
           }
         }
@@ -314,13 +328,99 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
     return List.generate(8, (index) => chars[rand.nextInt(chars.length)]).join();
   }
 
-  void _showCreateUserDialog() {
+  Future<List<Map<String, dynamic>>> _loadHabitantesForUserCreation() async {
+    final List<Map<String, dynamic>> list = [];
+    final Set<String> ids = {};
+
+    try {
+      final mongo = sl<MongoDBService>();
+      final remote = await mongo.getRecords('habitants', queryParameters: {'limit': 1000});
+      for (var r in remote) {
+        final id = (r['id'] ?? r['_id'] ?? '').toString();
+        final nombres = (r['nombres'] ?? '').toString().trim();
+        final apellidos = (r['apellidos'] ?? '').toString().trim();
+        final cedula = (r['cedula'] ?? '').toString().trim();
+        final telefono = (r['telefono'] ?? '').toString().trim();
+        final sector = (r['sector'] ?? '').toString().trim();
+        final fullName = '$nombres $apellidos'.trim();
+
+        if (fullName.isNotEmpty && !ids.contains(id)) {
+          ids.add(id);
+          list.add({
+            'id': id,
+            'nombres': nombres,
+            'apellidos': apellidos,
+            'fullName': fullName,
+            'cedula': cedula,
+            'telefono': telefono,
+            'sector': sector,
+          });
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final box = Hive.isBoxOpen(HiveConfig.habitantsBox)
+          ? Hive.box(HiveConfig.habitantsBox)
+          : await Hive.openBox(HiveConfig.habitantsBox);
+      for (var h in box.values) {
+        String id = '';
+        String nombres = '';
+        String apellidos = '';
+        String cedula = '';
+        String telefono = '';
+        String sector = '';
+
+        if (h is HabitanteModel) {
+          id = h.id;
+          nombres = h.nombres;
+          apellidos = h.apellidos;
+          cedula = h.cedula;
+          telefono = h.telefono;
+          sector = h.sector;
+        } else if (h is Map) {
+          id = (h['id'] ?? '').toString();
+          nombres = (h['nombres'] ?? '').toString();
+          apellidos = (h['apellidos'] ?? '').toString();
+          cedula = (h['cedula'] ?? '').toString();
+          telefono = (h['telefono'] ?? '').toString();
+          sector = (h['sector'] ?? '').toString();
+        }
+
+        final fullName = '$nombres $apellidos'.trim();
+        if (fullName.isNotEmpty && !ids.contains(id)) {
+          ids.add(id);
+          list.add({
+            'id': id,
+            'nombres': nombres,
+            'apellidos': apellidos,
+            'fullName': fullName,
+            'cedula': cedula,
+            'telefono': telefono,
+            'sector': sector,
+          });
+        }
+      }
+    } catch (_) {}
+
+    list.sort((a, b) => (a['fullName'] as String).compareTo(b['fullName'] as String));
+    return list;
+  }
+
+  Future<void> _showCreateUserDialog() async {
+    final habitanteOptions = await _loadHabitantesForUserCreation();
+
     final nameController = TextEditingController();
     final usernameController = TextEditingController();
     final emailController = TextEditingController();
+    final cedulaController = TextEditingController();
+    final telefonoController = TextEditingController();
     final passwordController = TextEditingController(text: _generateProvisionalPassword());
     String selectedRole = 'Operador';
+    Map<String, dynamic>? selectedHabitante;
     final formKey = GlobalKey<FormState>();
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -328,278 +428,439 @@ class _AdministracionGeneralPageState extends State<AdministracionGeneralPage> {
         final size = MediaQuery.of(dialogContext).size;
         final isMobile = size.width < 600;
 
-        return Dialog(
-          alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
-          insetPadding: isMobile ? const EdgeInsets.only(top: 40) : const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
-          shape: RoundedRectangleBorder(
-            borderRadius: isMobile 
-              ? const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))
-              : BorderRadius.circular(16),
-          ),
-          backgroundColor: Colors.white,
-          elevation: 8,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 500,
-              maxHeight: isMobile ? size.height * 0.9 : size.height * 0.85,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF416FDF),
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: isMobile ? Radius.zero : Radius.zero,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Crear Nuevo Usuario',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+        return StatefulBuilder(
+          builder: (stContext, setDialogState) {
+            return Dialog(
+              alignment: isMobile ? Alignment.bottomCenter : Alignment.center,
+              insetPadding: isMobile ? const EdgeInsets.only(top: 40) : const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
+              shape: RoundedRectangleBorder(
+                borderRadius: isMobile 
+                  ? const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))
+                  : BorderRadius.circular(16),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 8,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 540,
+                  maxHeight: isMobile ? size.height * 0.9 : size.height * 0.88,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF416FDF),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(16),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: isMobile ? Radius.zero : Radius.zero,
                         ),
                       ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        icon: const Icon(Icons.close, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Nombre de Usuario *',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: usernameController,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              hintText: 'Ej. jperez',
-                              hintStyle: const TextStyle(color: Colors.black38),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                            validator: (v) => v == null || v.trim().isEmpty ? 'El usuario es obligatorio' : null,
-                          ),
-                          const SizedBox(height: 16),
-
-                          const Text(
-                            'Nombre Completo *',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: nameController,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              hintText: 'Ej. Juan Pérez',
-                              hintStyle: const TextStyle(color: Colors.black38),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                            validator: (v) => v == null || v.trim().isEmpty ? 'El nombre es obligatorio' : null,
-                          ),
-                          const SizedBox(height: 16),
-
-                          const Text(
-                            'Correo Electrónico *',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: emailController,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              hintText: 'Ej. juan.perez@comuniapp.org',
-                              hintStyle: const TextStyle(color: Colors.black38),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return 'El correo es obligatorio';
-                              if (!v.contains('@') || !v.contains('.')) return 'Ingrese un correo válido';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          const Text(
-                            'Rol Asignado *',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<String>(
-                            dropdownColor: Colors.white,
-                            value: selectedRole,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                            items: _staticRoles
-                                .map((r) => DropdownMenuItem(value: r.name, child: Text(r.name)))
-                                .toList(),
-                            onChanged: (val) => setState(() => selectedRole = val!),
-                          ),
-                          const SizedBox(height: 16),
-
-                          const Text(
-                            'Contraseña *',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Escriba una contraseña o genere una automáticamente',
-                            style: TextStyle(color: Colors.black45, fontSize: 12),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: passwordController,
-                            style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
-                            decoration: InputDecoration(
-                              hintText: 'Mínimo 6 caracteres',
-                              hintStyle: const TextStyle(color: Colors.black38),
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.refresh, color: Color(0xFF416FDF)),
-                                tooltip: 'Generar contraseña aleatoria',
-                                onPressed: () {
-                                  passwordController.text = _generateProvisionalPassword();
-                                },
+                          const Row(
+                            children: [
+                              Icon(Icons.person_add, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text(
+                                'Crear Usuario desde Habitante',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'La contraseña es obligatoria';
-                              if (v.trim().length < 6) return 'Mínimo 6 caracteres';
-                              return null;
-                            },
+                            ],
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close, color: Colors.white),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                    color: Colors.grey.shade50,
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text('Cancelar', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
-                      ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF416FDF),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          elevation: 2,
-                        ),
-                        onPressed: () async {
-                          if (formKey.currentState!.validate()) {
-                            final newUser = SystemUser(
-                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                              username: usernameController.text.trim().toLowerCase(),
-                              name: nameController.text.trim(),
-                              email: emailController.text.trim(),
-                              role: selectedRole,
-                              status: 'Activo',
-                              password: passwordController.text.trim(),
-                            );
-
-                            try {
-                              final mongo = sl<MongoDBService>();
-                              await mongo.createUser({
-                                'username': newUser.username,
-                                'password': newUser.password,
-                                'role': newUser.role.toLowerCase(),
-                                'nombres': newUser.name,
-                                'email': newUser.email,
-                              });
-                              final recoveredBox = await Hive.openBox('recovered_credentials');
-                              await recoveredBox.put(newUser.username, newUser.password);
-                              final usersBox = await Hive.openBox('system_users_box');
-                              await usersBox.put(newUser.username, {
-                                'id': newUser.id,
-                                'username': newUser.username,
-                                'name': newUser.name,
-                                'email': newUser.email,
-                                'role': newUser.role,
-                                'status': newUser.status,
-                              });
-                            } catch (_) {}
-
-                            setState(() {
-                              _users.insert(0, newUser);
-                              UserRolesHelper.updateOperadoresFromList(
-                                _users.map((u) => {
-                                  'username': u.username,
-                                  'nombres': u.name,
-                                  'role': u.role,
-                                }).toList()
-                              );
-                            });
-
-                            sl<AuditLoggerService>().log('Creó al usuario "${newUser.name}" (${newUser.role})');
-
-                            if (mounted) {
-                              Navigator.pop(dialogContext);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Usuario "${newUser.name}" creado con éxito.'),
-                                  backgroundColor: Colors.green,
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // ── 1. Seleccionar Habitante Registrado ──
+                              const Text(
+                                'Habitante Registrado *',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Seleccione un habitante existente para importar automáticamente sus datos',
+                                style: TextStyle(color: Colors.black45, fontSize: 12),
+                              ),
+                              const SizedBox(height: 8),
+                              if (habitanteOptions.isEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.amber.shade200),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'No hay habitantes registrados. Registre primero a un habitante en la sección de Habitantes.',
+                                          style: TextStyle(fontSize: 12, color: Colors.black87),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 16),
+                              ] else ...[
+                                DropdownButtonFormField<Map<String, dynamic>>(
+                                  dropdownColor: Colors.white,
+                                  value: selectedHabitante,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    hintText: 'Seleccionar habitante...',
+                                    hintStyle: const TextStyle(color: Colors.black38),
+                                    prefixIcon: const Icon(Icons.person_search, color: Color(0xFF416FDF)),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  ),
+                                  items: habitanteOptions.map((h) {
+                                    final fullName = h['fullName'] ?? '';
+                                    final ced = h['cedula'] != null && h['cedula'].toString().isNotEmpty
+                                        ? ' • C.I: ${h['cedula']}'
+                                        : '';
+                                    final sec = h['sector'] != null && h['sector'].toString().isNotEmpty
+                                        ? ' (${h['sector']})'
+                                        : '';
+                                    return DropdownMenuItem<Map<String, dynamic>>(
+                                      value: h,
+                                      child: Text('$fullName$ced$sec', overflow: TextOverflow.ellipsis),
+                                    );
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setDialogState(() {
+                                        selectedHabitante = val;
+                                        nameController.text = val['fullName'] ?? '';
+                                        cedulaController.text = val['cedula'] ?? '';
+                                        telefonoController.text = val['telefono'] ?? '';
+
+                                        final rawCed = (val['cedula'] ?? '').toString().trim();
+                                        final cleanCed = rawCed.replaceAll(RegExp(r'[^a-zA-Z0-9\-]'), '');
+                                        String suggestedUser = cleanCed.isNotEmpty
+                                            ? cleanCed.replaceAll('-', '_')
+                                            : ((val['nombres'] ?? '') + (val['apellidos'] ?? ''))
+                                                .toString()
+                                                .toLowerCase()
+                                                .replaceAll(RegExp(r'[^a-z0-9]'), '');
+                                        if (suggestedUser.isEmpty) suggestedUser = 'user_${DateTime.now().millisecondsSinceEpoch}';
+
+                                        usernameController.text = suggestedUser;
+                                        emailController.text = '$suggestedUser@comuniapp.org';
+                                      });
+                                    }
+                                  },
+                                  validator: (v) => v == null ? 'Debe seleccionar un habitante' : null,
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+
+                              // ── 2. Datos importados del habitante ──
+                              const Text(
+                                'Nombre Completo',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: nameController,
+                                style: const TextStyle(color: Colors.black87),
+                                readOnly: habitanteOptions.isNotEmpty,
+                                decoration: InputDecoration(
+                                  hintText: 'Nombre del habitante',
+                                  filled: true,
+                                  fillColor: Colors.grey.shade100,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                ),
+                                validator: (v) => v == null || v.trim().isEmpty ? 'El nombre es obligatorio' : null,
+                              ),
+                              const SizedBox(height: 16),
+
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Cédula', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                                        const SizedBox(height: 8),
+                                        TextFormField(
+                                          controller: cedulaController,
+                                          style: const TextStyle(color: Colors.black87),
+                                          readOnly: habitanteOptions.isNotEmpty,
+                                          decoration: InputDecoration(
+                                            hintText: 'Cédula',
+                                            filled: true,
+                                            fillColor: Colors.grey.shade100,
+                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Teléfono', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                                        const SizedBox(height: 8),
+                                        TextFormField(
+                                          controller: telefonoController,
+                                          style: const TextStyle(color: Colors.black87),
+                                          readOnly: habitanteOptions.isNotEmpty,
+                                          decoration: InputDecoration(
+                                            hintText: 'Teléfono',
+                                            filled: true,
+                                            fillColor: Colors.grey.shade100,
+                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              // ── 3. Datos de Usuario/Acceso ──
+                              const Text(
+                                'Nombre de Usuario *',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: usernameController,
+                                style: const TextStyle(color: Colors.black87),
+                                decoration: InputDecoration(
+                                  hintText: 'Ej. jperez o 12345678',
+                                  hintStyle: const TextStyle(color: Colors.black38),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                ),
+                                validator: (v) => v == null || v.trim().isEmpty ? 'El usuario es obligatorio' : null,
+                              ),
+                              const SizedBox(height: 16),
+
+                              const Text(
+                                'Correo Electrónico *',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: emailController,
+                                style: const TextStyle(color: Colors.black87),
+                                decoration: InputDecoration(
+                                  hintText: 'Ej. juan.perez@comuniapp.org',
+                                  hintStyle: const TextStyle(color: Colors.black38),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) return 'El correo es obligatorio';
+                                  if (!v.contains('@') || !v.contains('.')) return 'Ingrese un correo válido';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              const Text(
+                                'Rol Asignado *',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                dropdownColor: Colors.white,
+                                value: selectedRole,
+                                style: const TextStyle(color: Colors.black87),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                ),
+                                items: _staticRoles
+                                    .map((r) => DropdownMenuItem(value: r.name, child: Text(r.name)))
+                                    .toList(),
+                                onChanged: (val) => setDialogState(() => selectedRole = val!),
+                              ),
+                              const SizedBox(height: 16),
+
+                              const Text(
+                                'Contraseña *',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Escriba una contraseña o genere una automáticamente',
+                                style: TextStyle(color: Colors.black45, fontSize: 12),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: passwordController,
+                                style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+                                decoration: InputDecoration(
+                                  hintText: 'Mínimo 6 caracteres',
+                                  hintStyle: const TextStyle(color: Colors.black38),
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.refresh, color: Color(0xFF416FDF)),
+                                    tooltip: 'Generar contraseña aleatoria',
+                                    onPressed: () {
+                                      setDialogState(() {
+                                        passwordController.text = _generateProvisionalPassword();
+                                      });
+                                    },
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) return 'La contraseña es obligatoria';
+                                  if (v.trim().length < 6) return 'Mínimo 6 caracteres';
+                                  return null;
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                        color: Colors.grey.shade50,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Cancelar', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 16),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF416FDF),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 2,
+                            ),
+                            onPressed: () async {
+                              if (formKey.currentState!.validate()) {
+                                final newUser = SystemUser(
+                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                  username: usernameController.text.trim().toLowerCase(),
+                                  name: nameController.text.trim(),
+                                  email: emailController.text.trim(),
+                                  role: selectedRole,
+                                  status: 'Activo',
+                                  password: passwordController.text.trim(),
+                                  cedula: cedulaController.text.trim(),
+                                  telefono: telefonoController.text.trim(),
+                                );
+
+                                final habitantNombres = selectedHabitante?['nombres'] ?? '';
+                                final habitantApellidos = selectedHabitante?['apellidos'] ?? '';
+
+                                try {
+                                  final mongo = sl<MongoDBService>();
+                                  await mongo.createUser({
+                                    'username': newUser.username,
+                                    'password': newUser.password,
+                                    'role': newUser.role.toLowerCase(),
+                                    'nombres': habitantNombres.isNotEmpty ? habitantNombres : newUser.name,
+                                    'apellidos': habitantApellidos,
+                                    'cedula': newUser.cedula,
+                                    'telefono': newUser.telefono,
+                                    'email': newUser.email,
+                                  });
+                                  final recoveredBox = await Hive.openBox('recovered_credentials');
+                                  await recoveredBox.put(newUser.username, newUser.password);
+                                  final usersBox = await Hive.openBox('system_users_box');
+                                  await usersBox.put(newUser.username, {
+                                    'id': newUser.id,
+                                    'username': newUser.username,
+                                    'name': newUser.name,
+                                    'email': newUser.email,
+                                    'role': newUser.role,
+                                    'status': newUser.status,
+                                    'cedula': newUser.cedula,
+                                    'telefono': newUser.telefono,
+                                  });
+                                } catch (_) {}
+
+                                setState(() {
+                                  _users.insert(0, newUser);
+                                  UserRolesHelper.updateOperadoresFromList(
+                                    _users.map((u) => {
+                                      'username': u.username,
+                                      'nombres': u.name,
+                                      'role': u.role,
+                                    }).toList()
+                                  );
+                                });
+
+                                sl<AuditLoggerService>().log('Creó al usuario "${newUser.name}" (C.I. ${newUser.cedula}) con rol ${newUser.role}');
+
+                                if (mounted) {
+                                  Navigator.pop(dialogContext);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Usuario "${newUser.name}" creado con éxito desde el habitante.'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

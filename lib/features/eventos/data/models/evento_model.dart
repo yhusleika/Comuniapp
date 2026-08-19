@@ -138,7 +138,7 @@ class EventoModel extends ManagementItem {
 
   factory EventoModel.fromJson(Map<String, dynamic> json) {
     return EventoModel(
-      id: json['id'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
       name: json['name'] ?? '',
       date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
       description: json['description'] ?? '',

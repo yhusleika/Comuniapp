@@ -12,20 +12,17 @@ connectDB();
 
 const app = express();
 
-// 1. Control de CORS con soporte preflight para Flutter Web y móvil
 app.use(cors({
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-user-role', 'x-username', 'X-User-Role', 'X-Username']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
-// 2. Cabeceras HTTP de Seguridad (Helmet)
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// 3. Rate Limiting (Prevención de ataques de Fuerza Bruta y DoS)
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 200,
@@ -68,7 +65,6 @@ app.get('/', (req, res) => {
     res.json({ message: 'Bienvenido a la API de Comuniapp - Servidor Seguro' });
 });
 
-// Health check para Render y monitoreo
 app.get(['/health', '/v1/health'], (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });

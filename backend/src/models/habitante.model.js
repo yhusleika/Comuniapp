@@ -17,7 +17,7 @@ const habitanteSchema = new mongoose.Schema({
     registeredBy: { type: String, required: true },
     fechaRegistro: { type: Date, required: true },
     fechaNacimiento: { type: Date },
-    genero: { type: String, default: '' },
+    sexo: { type: String, default: '' },
     ayudaRecibida: { type: String, default: '' }
 }, {
     timestamps: true

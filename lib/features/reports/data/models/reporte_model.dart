@@ -111,7 +111,7 @@ class ReporteModel extends HiveObject {
 
   factory ReporteModel.fromJson(Map<String, dynamic> json) {
     return ReporteModel(
-      id: json['id'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
       titulo: json['titulo'] ?? '',
       descripcion: json['descripcion'] ?? '',
       tipo: json['tipo'] ?? '',

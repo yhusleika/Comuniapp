@@ -151,4 +151,33 @@ const getProfile = async (req, res) => {
     }
 };
 
-module.exports = { getUsers, createUser, updateUser, deleteUser, updateProfile, getProfile };
+// Restablecer contraseña sin autenticación (después de validar preguntas de seguridad en el cliente)
+const resetPasswordPublic = async (req, res) => {
+    try {
+        const { username, newPassword } = req.body;
+        if (!username || !newPassword) {
+            return res.status(400).json({ success: false, error: 'Usuario y nueva contraseña son requeridos' });
+        }
+
+        if (newPassword.trim().length < 6) {
+            return res.status(400).json({ success: false, error: 'La contraseña debe tener al menos 6 caracteres' });
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword.trim(), 12);
+        const user = await User.findOneAndUpdate(
+            { username: username.toLowerCase().trim() },
+            { $set: { passwordHash } },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+        }
+
+        res.status(200).json({ success: true, message: 'Contraseña restablecida exitosamente' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+module.exports = { getUsers, createUser, updateUser, deleteUser, updateProfile, getProfile, resetPasswordPublic };

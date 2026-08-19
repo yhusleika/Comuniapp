@@ -42,7 +42,7 @@ class HabitanteModel extends HiveObject {
   @HiveField(17)
   final DateTime? fechaNacimiento;
   @HiveField(18)
-  final String genero;
+  final String sexo;
 
   HabitanteModel({
     required this.id,
@@ -61,7 +61,7 @@ class HabitanteModel extends HiveObject {
     required this.registeredBy,
     required this.fechaRegistro,
     this.fechaNacimiento,
-    this.genero = '',
+    this.sexo = '',
     this.isSynced = false,
     this.ayudaRecibida = '',
   });
@@ -84,7 +84,7 @@ class HabitanteModel extends HiveObject {
         registeredBy: registeredBy,
         fechaRegistro: fechaRegistro,
         fechaNacimiento: fechaNacimiento,
-        genero: genero,
+        sexo: sexo,
       );
 
   factory HabitanteModel.fromEntity(Habitante habitante) {
@@ -106,7 +106,7 @@ class HabitanteModel extends HiveObject {
       registeredBy: habitante.registeredBy,
       fechaRegistro: habitante.fechaRegistro,
       fechaNacimiento: habitante.fechaNacimiento,
-      genero: habitante.genero,
+      sexo: habitante.sexo,
     );
   }
 
@@ -129,7 +129,7 @@ class HabitanteModel extends HiveObject {
       registeredBy: registeredBy,
       fechaRegistro: fechaRegistro,
       fechaNacimiento: fechaNacimiento,
-      genero: genero,
+      sexo: sexo,
       isSynced: isSynced ?? this.isSynced,
     );
   }
@@ -152,7 +152,7 @@ class HabitanteModel extends HiveObject {
       'registeredBy': registeredBy,
       'fechaRegistro': fechaRegistro.toIso8601String(),
       'fechaNacimiento': fechaNacimiento?.toIso8601String(),
-      'genero': genero,
+      'sexo': sexo,
       'isSynced': isSynced,
       'ayudaRecibida': ayudaRecibida,
     };
@@ -160,7 +160,7 @@ class HabitanteModel extends HiveObject {
 
   factory HabitanteModel.fromJson(Map<String, dynamic> json) {
     return HabitanteModel(
-      id: json['id'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
       cedula: json['cedula'] ?? '',
       nombres: json['nombres'] ?? '',
       apellidos: json['apellidos'] ?? '',
@@ -176,7 +176,7 @@ class HabitanteModel extends HiveObject {
       registeredBy: json['registeredBy'] ?? '',
       fechaRegistro: DateTime.tryParse(json['fechaRegistro'] ?? '') ?? DateTime.now(),
       fechaNacimiento: json['fechaNacimiento'] != null ? DateTime.tryParse(json['fechaNacimiento']) : null,
-      genero: json['genero'] ?? '',
+      sexo: json['sexo'] ?? json['genero'] ?? '',
       isSynced: true,
       ayudaRecibida: json['ayudaRecibida'] ?? '',
     );

@@ -57,7 +57,7 @@ class AyudaTypeModel extends AyudaType {
 
   factory AyudaTypeModel.fromJson(Map<String, dynamic> json) {
     return AyudaTypeModel(
-      id: json['id'] ?? '',
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
       nombre: json['nombre'] ?? '',
       responsable: json['responsable'] ?? '',
       descripcion: json['descripcion'] ?? '',

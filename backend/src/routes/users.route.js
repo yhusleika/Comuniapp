@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { getUsers, createUser, updateUser, deleteUser, updateProfile, getProfile } = require('../controllers/users.controller');
+const { getUsers, createUser, updateUser, deleteUser, updateProfile, getProfile, resetPasswordPublic } = require('../controllers/users.controller');
 const { register, login } = require('../controllers/auth.controller');
 const { verifyToken } = require('../middleware/auth.middleware');
 
@@ -29,6 +29,7 @@ const upload = multer({ storage: storage });
 // Rutas públicas de autenticación
 router.post('/register', register);
 router.post('/login', login);
+router.post('/reset-password', resetPasswordPublic);
 
 // Rutas CRUD de gestión de usuarios (Admin/Backend)
 router.get('/', verifyToken, getUsers);

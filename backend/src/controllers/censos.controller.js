@@ -12,7 +12,6 @@ const deleteCenso = async (req, res) => {
         const censo = await Censo.findOneAndDelete({ id: censoId });
         if (!censo) return res.status(404).json({ success: false, message: "Censo no encontrado" });
 
-        // Eliminar en cascada las encuestas/registros asociados a este censo
         await CensoRecord.deleteMany({ censoId: censoId });
 
         res.status(200).json({ success: true, message: "Censo y sus registros asociados eliminados" });
@@ -23,4 +22,3 @@ const deleteCenso = async (req, res) => {
 };
 
 module.exports = { syncCenso, getCensos, updateCenso, deleteCenso };
-
